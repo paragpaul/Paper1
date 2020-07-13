@@ -29,7 +29,7 @@ namespace ConsoleApp1
 
 
         // The heap tuple will have 2 of these and their spreads
-        public struct HeapElem
+        public class HeapElem : IComparable
         {
             public float intercept;
             public float slope;
@@ -39,17 +39,18 @@ namespace ConsoleApp1
             public int start;
             public int end;
 
+
             public float GetNorm()
             {
                 float fin1 = intercept / Program.maxalpha;
-                fin1 = fin1 * Program.contrib + (1 - Program.contrib) *slope;
+                fin1 = fin1 * Program.contrib + (1 - Program.contrib) * slope;
                 return fin1;
             }
 
             public float mergeintercept;
             public float mergeslope;
 
-            public HeapStatElem  mergehsElemM;
+            public HeapStatElem mergehsElemM;
             public int mergespread; // so that we know, how many have been merged into the two.
             public List<float> mergeerrorList;
             public int mergestart;
@@ -65,6 +66,19 @@ namespace ConsoleApp1
 
             bool mergePossible;
 
+
+            public int CompareTo(object obj)
+            {
+                if (obj == null) return 1;
+
+                HeapElem otherTemperature = obj as HeapElem;
+                if (otherTemperature != null)
+                    return this.start - otherTemperature.start;
+                else
+                    throw new ArgumentException("Object is not a HeapElement");
+            }
+
+
         }
 
         public struct HeapStatElem
@@ -77,7 +91,7 @@ namespace ConsoleApp1
             public float average_range_rows;
         }
 
-        public struct StatStep
+        public class StatStep
         {
             public int step_number;
             public int range_high_key;
@@ -88,7 +102,7 @@ namespace ConsoleApp1
         }
 
 
-        public struct ErrorListElem
+        public class ErrorListElem
         {
             public float countStat;
             public float countAct;
@@ -102,7 +116,7 @@ namespace ConsoleApp1
             try
             {
                 string folderName = @"C:\Work\Stats\Exper";
-                string dirName = DateTime.Now.ToString("ddd MM.dd.yyyy_HH:mm_tt");
+                string dirName = DateTime.Now.ToString("MM.dd.yyyy_HH:mm_tt");
 
 
                 Random random = new Random();
@@ -244,30 +258,7 @@ namespace ConsoleApp1
                     int num = 0;
                     List<ErrorListElem> erroriterator = new List<ErrorListElem>();
                     // We have range queries
-                    foreach (var tup in rangeRows)
-                    {
-                        // we need to query how many values are there. 
-                        var count = colVal.Select(x => x).Count(r => r >= tup.Item1 && r <= tup.Item2);
-
-                        // Now we have the actual count, 
-                        //next we need the count from stat
-                        var countFromStat = CalculateValuesFromHistogram(tup.Item1, tup.Item2, ref lisS);
-
-                        float errorRate = ((float)(countFromStat + 1)) / (float)(count + 1);
-
-                        if (errorRate < 1 && errorRate > 0)
-                        {
-                            errorRate = 1 / errorRate;
-                        }
-                        errorRateList.Add(errorRate);
-                        ErrorListElem ee = new ErrorListElem();
-                        ee.countAct = count;
-                        ee.countStat = countFromStat;
-                        ee.qE = errorRate;
-                        ee.num = num++;
-                        erroriterator.Add(ee);
-                    }
-
+                    GetErrorList(rangeRows, colVal, errorRateList, erroriterator, lisS);
 
                     // We have the erroRate list and now we will sort it
                     errorRateList.Sort();
@@ -301,6 +292,32 @@ namespace ConsoleApp1
                         }
                     }
 
+                    List<StatStep> histLs = new List<StatStep>();
+                    CreateHistogramFromAlgorithm(colVal, histLs, 3);
+                    // We are working on the follow
+                    //  we have te new histogram. We will now need to do the same estimation things
+
+                    List<float> newErroRate = new List<float>();
+                    List<ErrorListElem> eeForNewIterator = new List<ErrorListElem>();
+
+                    GetErrorList(rangeRows, colVal, newErroRate, eeForNewIterator, histLs);
+
+                    //Let us also see the errors that we are getting. 
+                    newErroRate.Sort();
+                    newErroRate.ForEach(Console.WriteLine);
+
+                    csv = new StringBuilder();
+
+                    foreach (var v in eeForNewIterator)
+                    {
+                        var newLine = string.Format("{0},{1},{2}{3}", v.num, v.countAct, v.countStat, v.qE);
+                        csv.AppendLine(newLine);
+                    }
+                    string fileNameForFirstStatErrorRateNew = "HistogramSampleMain.csv";
+                    string FullnameHist = Path.Combine(FoldToCreateFiles, fileNameForFirstStatErrorRateNew);
+
+                    //after your loop , you write all the errors to the CSV file, in the folder that you wwant to see
+                    File.WriteAllText(FullnameHist, csv.ToString());
                 }
             }
             catch (SqlException e)
@@ -313,9 +330,41 @@ namespace ConsoleApp1
         }
 
 
+        // Have a mechanism to quickly create a error list for agiven range rows
+        // for apples to apple comparion the random ranges need to be on the same value boundaries 
+        // for the lower and the upper boundaries.
+        static void GetErrorList(List<Tuple<int, int>> rangeRows, List<int> colVal, List<float> errorRateList, List<ErrorListElem> erroriterator, List<StatStep> lisS)
+        {
+            int num = 0;
+            foreach (var tup in rangeRows)
+            {
+                // we need to query how many values are there. 
+                var count = colVal.Select(x => x).Count(r => r >= tup.Item1 && r <= tup.Item2);
+
+                // Now we have the actual count, 
+                //next we need the count from stat
+                var countFromStat = CalculateValuesFromHistogram(tup.Item1, tup.Item2, lisS);
+
+                float errorRate = ((float)(countFromStat + 1)) / (float)(count + 1);
+
+                if (errorRate < 1 && errorRate > 0)
+                {
+                    errorRate = 1 / errorRate;
+                }
+                errorRateList.Add(errorRate);
+                ErrorListElem ee = new ErrorListElem();
+                ee.countAct = count;
+                ee.countStat = countFromStat;
+                ee.qE = errorRate;
+                ee.num = num++;
+                erroriterator.Add(ee);
+            }
+
+        }
+
         // This is the one that creates various histogram elements
         // from the values we already store and keep
-        static void CreateHistogramFromAlgorithm(ref List<int> colVal, List<StatStep> histLs, int num)
+        static void CreateHistogramFromAlgorithm(List<int> colVal, List<StatStep> histLs, int num)
         {
 
             //we  have the histogram
@@ -377,7 +426,7 @@ namespace ConsoleApp1
 
             List<float> qeList = new List<float>();
             List<HeapElem> heElemList = new List<HeapElem>();
-            maxalpha  = float.MinValue;
+            maxalpha = float.MinValue;
 
 
             foreach (var v in keyEl)
@@ -399,7 +448,7 @@ namespace ConsoleApp1
             {
                 HeapElem he = new HeapElem();
                 he.start = i * num;
-                he.end =( i+1) * (num ) - 1;
+                he.end = (i + 1) * (num) - 1;
                 he.hsElem = lhse[i];
                 he.spread = (int)lhse[i].range_rows + 1;
                 he.errorList = new List<float>();
@@ -408,10 +457,10 @@ namespace ConsoleApp1
                 for (int j = 0; j < num; j++)
                 {
                     he.errorList.Add(qeList[i * num + j]);
-                   
+
                 }
 
-                for (int j= 0; j< num; j++)
+                for (int j = 0; j < num; j++)
 
                 {
                     he.errorList.Sort();
@@ -458,7 +507,7 @@ namespace ConsoleApp1
             {
                 c++;
                 heElem.errorList.Add(qeList[i]);
-   
+
 
             }
 
@@ -477,7 +526,7 @@ namespace ConsoleApp1
             heElem.spread = c;
 
             float sumno = c * (c + 1) / 2;
-            float sumnso = c*(c + 1) * (2 * c + 1) / 6;
+            float sumnso = c * (c + 1) * (2 * c + 1) / 6;
             float betanomo = c * prod1o - sumno * sum2o;
             float betadeno = c * sumnso - sumno * sumno;
 
@@ -507,14 +556,14 @@ namespace ConsoleApp1
                 HeapElem h2 = heElemList[i + 1];
 
 
-                MergeTwoHeapElem(ref h1, ref h2);
+                MergeTwoHeapElem(h1, h2);
                 // We have for nodes, their merged values.
-                
+
             }
             // Heap Elem List has all the heaps with their mergeability information defined. 
 
             Heap.PriorityQueue<HeapElem, Tuple<float, float>> heapForWork = new Heap.PriorityQueue<HeapElem, Tuple<float, float>>();
-            for (int i = 0; i < heElemList.Count -1; i++)
+            for (int i = 0; i < heElemList.Count - 1; i++)
             {
                 heapForWork.Enqueue(heElemList[i], new Tuple<float, float>(heElemList[i].mergeslope, heElemList[i].mergeintercept));
             }
@@ -548,29 +597,61 @@ namespace ConsoleApp1
                         break;
                     }
                 }
-                
-                if (k < heElemList)
 
-                // Now to merge it with the next element. 
-                MergeTwoHeapElem(hewNew, hElemList[)
+                if (k < heElemList.Count - 1)
+                {
+                    // Now to merge it with the next element. 
+                    MergeTwoHeapElem(heNew, heElemList[k + 2]);
+                }
+                // We iwll keep removing it after every change.
+                heElemList.RemoveAt(k + 1);
+
+                foreach (var v in heapForWork)
+                {
+                    if (v.Key.end == he.start)
+                    {
+                        MergeTwoHeapElem(v.Key, heNew);
+                        break;
+                    }
+                }
+
+                // So both the sides are merged and we can have them in the heap inserted back again.
             }
 
+            // At this point, we will have merged a few cases here and here
+
+            // Now build the list
+
+            foreach (var v in heElemList)
+            {
+                // Should have the lmited he element list
+                StatStep ss = new StatStep();
+                ss.average_range_rows = v.hsElem.average_range_rows;
+                ss.distint_range_rows = v.hsElem.distint_range_rows;
+                ss.equal_rows = v.hsElem.equal_rows;
+                ss.range_high_key = v.hsElem.range_high_key;
+                ss.range_rows = v.hsElem.range_rows;
+                histLs.Add(ss);
+
+            }
+
+            return;
         }
 
-        static  HeapElem SearchHeapElemNext(HeapElem he, ref List<HeapElem> lshe)
+        static HeapElem SearchHeapElemNext(HeapElem he, ref List<HeapElem> lshe)
         {
-          
-            foreach(var v in lshe)
+
+            foreach (var v in lshe)
             {
                 if (v.start > he.end)
                 {
-                    return  v;
+                    return v;
                 }
             }
             return lshe[0];
         }
 
-        static void MergeTwoHeapElem(ref HeapElem h1, ref HeapElem h2)
+        static void MergeTwoHeapElem(HeapElem h1, HeapElem h2)
         {
             // We have 2 in the list
             HeapStatElem hse = new HeapStatElem();
@@ -664,7 +745,7 @@ namespace ConsoleApp1
         }
 
 
-        static int CalculateValuesFromHistogram(int low, int high, ref List<StatStep> lisS)
+        static int CalculateValuesFromHistogram(int low, int high, List<StatStep> lisS)
         {
             int totCount = 0;
             int prevHi = Int32.MinValue;

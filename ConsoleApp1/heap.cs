@@ -374,6 +374,9 @@ namespace ConsoleApp1
                 get { return false; }
             }
 
+
+     
+
             /// <summary>
             /// Removes the first occurrence of a specific object from the priority queue. 
             /// </summary>
