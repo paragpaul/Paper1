@@ -11,7 +11,7 @@ namespace ConsoleApp1
 {
     class Program
     {
-        public static  SortedDictionary<int, int> dictCol = new SortedDictionary<int, int>();
+        public static SortedDictionary<int, int> dictCol = new SortedDictionary<int, int>();
 
         public const string TableName = "[Sales].[SalesOrderDetail]";
         public const string ColName = "ProductId";
@@ -20,9 +20,62 @@ namespace ConsoleApp1
         public const string statname3 = "stat3";
         public const string colName2 = "UnitPrice";
         public const string dbName = "adw";
+        public static float maxalpha = 0;
+
+        public static float contrib = 0.5f;
 
 
-        struct StatStep
+
+        // The heap tuple will have 2 of these and their spreads
+        public struct HeapElem
+        {
+            public float intercept;
+            public float slope;
+            public HeapStatElem hsElem;
+            public int spread; // so that we know, how many have been merged into the two.
+            public List<float> errorList;
+            public int start;
+            public int end;
+
+            public float GetNorm()
+            {
+                float fin1 = intercept / Program.maxalpha;
+                fin1 = fin1 * Program.contrib + (1 - Program.contrib) *slope;
+                return fin1;
+            }
+
+            public float mergeintercept;
+            public float mergeslope;
+
+            public HeapStatElem  mergehsElemM;
+            public int mergespread; // so that we know, how many have been merged into the two.
+            public List<float> mergeerrorList;
+            public int mergestart;
+            public int mergeend;
+
+            public float GetMergeNorm()
+            {
+                float fin1 = mergeintercept / Program.maxalpha;
+                fin1 = fin1 * Program.contrib + (1 - Program.contrib) * mergeslope;
+                return fin1;
+            }
+
+
+            bool mergePossible;
+
+        }
+
+        public struct HeapStatElem
+        {
+
+            public int range_high_key;
+            public float range_rows;
+            public float equal_rows;
+            public int distint_range_rows;
+            public float average_range_rows;
+        }
+
+        public struct StatStep
         {
             public int step_number;
             public int range_high_key;
@@ -33,7 +86,7 @@ namespace ConsoleApp1
         }
 
 
-        struct ErrorListElem
+        public struct ErrorListElem
         {
             public float countStat;
             public float countAct;
@@ -46,8 +99,8 @@ namespace ConsoleApp1
         {
             try
             {
-               string folderName = @"C:\Work\Stats\Exper";
-               string dirName = DateTime.Now.ToString("ddd MM.dd.yyyy_HH:mm_tt");
+                string folderName = @"C:\Work\Stats\Exper";
+                string dirName = DateTime.Now.ToString("ddd MM.dd.yyyy_HH:mm_tt");
 
 
                 Random random = new Random();
@@ -257,9 +310,300 @@ namespace ConsoleApp1
             Console.ReadKey(true);
         }
 
-        static ref List<StatStep>  CreateHistogramFromAlgorithm(ref List<int> colVal)
+
+        // This is the one that creates various histogram elements
+        // from the values we already store and keep
+        static void CreateHistogramFromAlgorithm(ref List<int> colVal, List<StatStep> histLs, int num)
         {
 
+            //we  have the histogram
+            int countHistInit = dictCol.Count();
+            List<int> keyEl = new List<int>(dictCol.Keys);
+
+
+            List<HeapStatElem> lhse = new List<HeapStatElem>();
+            List<float> errorList = new List<float>();
+
+
+            // Next will be the priority heap implementation
+            // So if there are modulo values, they will be picked i nthe end
+            // in a separate process
+            for (int i = 0; i < countHistInit / num - 1; i++)
+            {
+                HeapStatElem hs = new HeapStatElem();
+
+                hs.range_high_key = keyEl[i * num] + num - 1;
+
+                // For each histogram element , add their values in the q-error metric, which is a temporary thing
+
+                for (int j = 0; j < num - 1; j++)
+                {
+                    hs.range_rows += dictCol[keyEl[i * num + j]];
+
+                }
+                hs.equal_rows = dictCol[keyEl[i * num + (num - 1)]];
+                hs.distint_range_rows = num - 1;
+                hs.average_range_rows = hs.range_rows / hs.distint_range_rows;
+                lhse.Add(hs);
+            }
+
+            HeapStatElem hsElem = new HeapStatElem();
+            hsElem.equal_rows = dictCol[countHistInit - 1];
+            hsElem.range_high_key = keyEl[countHistInit - 1];
+            int tot = 0;
+            int d = 0;
+            for (int i = ((countHistInit / num) - 1) * num; i < countHistInit - 1; i++)
+            {
+                if (i < countHistInit - 1)
+                {
+                    tot += dictCol[keyEl[i]];
+                    d++;
+                }
+
+            }
+            hsElem.range_rows = tot;
+            hsElem.average_range_rows = tot / d;
+            hsElem.distint_range_rows = d;
+
+            // Final bucket if there are some values left, we will work on it
+            lhse.Add(hsElem);
+
+            // We have the hist Elem. 
+            // Now use that to find the  -q list and fill the q-error for each bucket.
+
+            // Now have the q-errors 
+
+            List<float> qeList = new List<float>();
+            List<HeapElem> heElemList = new List<HeapElem>();
+            maxalpha  = float.MinValue;
+
+
+            foreach (var v in keyEl)
+            {
+                float estimate = CalculateEMQEsitmateFromHist(ref lhse, v);
+                float actual = dictCol[v];
+
+                //  now we have the actual and estimate
+                float qe = (estimate + 1) / (actual + 1);
+                if (qe < 1)
+                {
+                    qe = (float)(1) / qe;
+                }
+
+                qeList.Add(qe);
+            }
+
+            for (int i = 0; i < countHistInit / num - 1; i++)
+            {
+                HeapElem he = new HeapElem();
+                he.start = i * num;
+                he.end =( i+1) * (num ) - 1;
+                he.hsElem = lhse[i];
+                he.spread = (int)lhse[i].range_rows + 1;
+                he.errorList = new List<float>();
+
+                float prod1 = 0, sum2 = 0, nls = 0, ls = 0;
+                for (int j = 0; j < num; j++)
+                {
+                    he.errorList.Add(qeList[i * num + j]);
+                   
+                }
+
+                for (int j= 0; j< num; j++)
+
+                {
+                    he.errorList.Sort();
+                    float val = (j + 1) * he.errorList[i * num + j];
+                    prod1 += val;
+
+                    sum2 += he.errorList[i * num + j];
+                }
+
+
+                float sumn = (num) * (num + 1) / 2;
+                float sumns = (num) * (num + 1) * (2 * num + 1) / 6;
+                float betanom = num * prod1 - (sumn) * sum2;
+                float betaden = num * sumns - (sumn) * (sumn);
+                float beta = betanom / betaden;
+
+                float alphanom = prod1 * sumns - sum2 * sumn;
+                float alphaden = betaden;
+                float alpha = alphanom / alphaden;
+
+                he.intercept = alpha;
+                he.slope = beta;
+
+                if (alpha > maxalpha)
+                {
+                    maxalpha = alpha;
+                }
+                heElemList.Add(he);
+                // At the end of the three, we will need to find the beta and alpha
+            }
+
+            HeapElem heElem = new HeapElem();
+            int c = 0;
+            heElem.start = (countHistInit / num - 1) * num;
+            heElem.end = countHistInit - 1;
+
+            heElem.hsElem = lhse[countHistInit / num - 1];
+
+            float prod1o = 0, sum2o = 0, nlso = 0, lso = 0;
+            heElem.errorList = new List<float>();
+
+            // Now for the last bucket
+            for (int i = (countHistInit / num - 1) * num; i < countHistInit; i++)
+            {
+                c++;
+                heElem.errorList.Add(qeList[i]);
+   
+
+            }
+
+            heElem.errorList.Sort();
+
+
+            for (int i = (countHistInit / num - 1) * num; i < countHistInit; i++)
+            {
+
+                float val = c * heElem.errorList[i];
+                prod1o += val;
+
+                sum2o += heElem.errorList[i];
+            }
+
+            heElem.spread = c;
+
+            float sumno = c * (c + 1) / 2;
+            float sumnso = c*(c + 1) * (2 * c + 1) / 6;
+            float betanomo = c * prod1o - sumno * sum2o;
+            float betadeno = c * sumnso - sumno * sumno;
+
+            float betao = betanomo / betadeno;
+
+            float alphanomo = sum2o * sumnso - prod1o * sumno;
+            float alphao = alphanomo / betadeno;
+
+            if (alphao < maxalpha)
+            {
+                maxalpha = alphao;
+
+            }
+
+            heElem.intercept = alphao;
+            heElem.slope = betao;
+
+            heElemList.Add(heElem);
+
+            // The list if ready, now, we need to build the Heap where the top element with the
+            // We will iterate over this list and now create the their mergestories.
+
+            int heapElemCount = heElemList.Count;
+            for (int i = 0; i < heapElemCount - 1; i++)
+            {
+                HeapElem h1 = heElemList[i];
+                HeapElem h2 = heElemList[i + 1];
+
+                // We have 2 in the list
+                HeapStatElem hse = new HeapStatElem();
+                HeapElem he = new HeapElem();
+
+                he.spread = h1.spread + h2.spread;
+                he.start = h1.start;
+                he.end = h2.end;
+
+                hse.range_high_key = h2.hsElem.range_high_key;
+                hse.equal_rows = h2.hsElem.equal_rows;
+
+                hse.distint_range_rows = h1.hsElem.distint_range_rows + 1 + h2.hsElem.distint_range_rows;
+                hse.range_rows = h1.hsElem.range_rows + h1.hsElem.equal_rows + h2.hsElem.range_rows;
+                hse.average_range_rows = hse.range_rows / hse.distint_range_rows;
+
+                he.hsElem = hse;
+
+                List<float> lisError = new List<float>();
+
+                // Now that we will go from the start to the end
+                // indices, so that we can find out the error values
+                for (int j = he.start; j < he.end; j++)
+                {
+                    float estimate = hse.average_range_rows;
+                    float actual = dictCol[j];
+
+                    float err = (estimate + 1) / (actual + 1);
+                    if (err < 1)
+                    {
+                        err = 1 / err;
+                    }
+
+                    lisError.Add(err);
+                }
+
+                lisError.Sort();
+                he.errorList = lisError;
+                // Now we will need to generate the sorted 
+                // list and find out the new metrics 
+
+                float prod1 = 0, sum1 = 0;
+                int k = 0;
+                for (int j = he.start; j < he.end; j++, k++)
+                {
+                    float val = k * lisError[j];
+                    prod1 += val;
+                    sum1 += lisError[j];
+                }
+
+                k--;
+                float sumn = k * (k + 1) / 2;
+                float sumns = k * (k + 1) * (2 * k + 1) / 6;
+
+                float betanom = k * prod1 - sumn * sum1;
+                float betaden = k * (sumns) - sumn * sumn;
+
+                float betam = betanom / betaden;
+
+                float alphanom = sum1 * sumns - prod1 * sumn;
+                float alpha = alphanom / betaden;
+
+                h1.mergeend = he.end;
+                h1.mergestart = he.start;
+                h1.mergehsElemM = hse;
+                h1.mergeerrorList = lisError;
+                h1.mergeintercept = betam;
+                h1.mergeslope = alpha;
+                h1.mergespread = he.spread;
+                
+                // We have for nodes, their merged values.
+                
+            }
+            // Heap Elem List has all the heaps with their mergeability information defined. 
+
+            Heap.PriorityQueue<HeapElem, Tuple<float, float>> heapForWork = new Heap.PriorityQueue<HeapElem, Tuple<float, float>>();
+            for (int i = 0; i < heElemList.Count -1; i++)
+            {
+                heapForWork.Enqueue(heElemList[i], new Tuple<float, float>(heElemList[i].mergeslope, heElemList[i].mergeintercept));
+            }
+
+
+        }
+
+        static float CalculateEMQEsitmateFromHist(ref List<HeapStatElem> his, int val)
+        {
+            int prevHi = Int32.MinValue;
+
+            for (int i = 0; i < his.Count(); i++)
+            {
+                if (his[i].range_high_key == val)
+                {
+                    return his[i].equal_rows;
+                }
+                if (his[i].range_high_key > val && val > prevHi)
+                {
+                    return his[i].average_range_rows;
+                }
+
+            }
+            return 0;
         }
 
 
