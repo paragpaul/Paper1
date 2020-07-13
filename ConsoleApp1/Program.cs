@@ -24,6 +24,8 @@ namespace ConsoleApp1
 
         public static float contrib = 0.5f;
 
+        public static int numSteps = 200;
+
 
 
         // The heap tuple will have 2 of these and their spreads
@@ -504,75 +506,8 @@ namespace ConsoleApp1
                 HeapElem h1 = heElemList[i];
                 HeapElem h2 = heElemList[i + 1];
 
-                // We have 2 in the list
-                HeapStatElem hse = new HeapStatElem();
-                HeapElem he = new HeapElem();
 
-                he.spread = h1.spread + h2.spread;
-                he.start = h1.start;
-                he.end = h2.end;
-
-                hse.range_high_key = h2.hsElem.range_high_key;
-                hse.equal_rows = h2.hsElem.equal_rows;
-
-                hse.distint_range_rows = h1.hsElem.distint_range_rows + 1 + h2.hsElem.distint_range_rows;
-                hse.range_rows = h1.hsElem.range_rows + h1.hsElem.equal_rows + h2.hsElem.range_rows;
-                hse.average_range_rows = hse.range_rows / hse.distint_range_rows;
-
-                he.hsElem = hse;
-
-                List<float> lisError = new List<float>();
-
-                // Now that we will go from the start to the end
-                // indices, so that we can find out the error values
-                for (int j = he.start; j < he.end; j++)
-                {
-                    float estimate = hse.average_range_rows;
-                    float actual = dictCol[j];
-
-                    float err = (estimate + 1) / (actual + 1);
-                    if (err < 1)
-                    {
-                        err = 1 / err;
-                    }
-
-                    lisError.Add(err);
-                }
-
-                lisError.Sort();
-                he.errorList = lisError;
-                // Now we will need to generate the sorted 
-                // list and find out the new metrics 
-
-                float prod1 = 0, sum1 = 0;
-                int k = 0;
-                for (int j = he.start; j < he.end; j++, k++)
-                {
-                    float val = k * lisError[j];
-                    prod1 += val;
-                    sum1 += lisError[j];
-                }
-
-                k--;
-                float sumn = k * (k + 1) / 2;
-                float sumns = k * (k + 1) * (2 * k + 1) / 6;
-
-                float betanom = k * prod1 - sumn * sum1;
-                float betaden = k * (sumns) - sumn * sumn;
-
-                float betam = betanom / betaden;
-
-                float alphanom = sum1 * sumns - prod1 * sumn;
-                float alpha = alphanom / betaden;
-
-                h1.mergeend = he.end;
-                h1.mergestart = he.start;
-                h1.mergehsElemM = hse;
-                h1.mergeerrorList = lisError;
-                h1.mergeintercept = betam;
-                h1.mergeslope = alpha;
-                h1.mergespread = he.spread;
-                
+                MergeTwoHeapElem(ref h1, ref h2);
                 // We have for nodes, their merged values.
                 
             }
@@ -584,8 +519,130 @@ namespace ConsoleApp1
                 heapForWork.Enqueue(heElemList[i], new Tuple<float, float>(heElemList[i].mergeslope, heElemList[i].mergeintercept));
             }
 
+            // At this point the heap is ready. Now pop and keep merging till the end.
+            while (heapForWork.Count > numSteps)
+            {
+                HeapElem he = heapForWork.Dequeue().Key;
+
+                // We got the he elem, now the hard work of the merged one to be inserted.
+
+                HeapElem heNew = new HeapElem();
+                HeapStatElem hs = new HeapStatElem();
+                heNew.hsElem = he.mergehsElemM;
+                heNew.intercept = he.mergeintercept;
+                heNew.slope = he.mergeslope;
+                heNew.intercept = he.mergeintercept;
+                heNew.errorList = he.mergeerrorList;
+                heNew.spread = he.spread;
+                heNew.end = he.mergeend;
+                heNew.start = he.mergestart;
+
+
+                int k = 0;
+                for (int i = 0; i < heElemList.Count; i++)
+                {
+                    if (heElemList[i].start > he.end)
+                    {
+                        k = i;
+                        heElemList[i] = heNew;
+                        break;
+                    }
+                }
+                
+                if (k < heElemList)
+
+                // Now to merge it with the next element. 
+                MergeTwoHeapElem(hewNew, hElemList[)
+            }
 
         }
+
+        static  HeapElem SearchHeapElemNext(HeapElem he, ref List<HeapElem> lshe)
+        {
+          
+            foreach(var v in lshe)
+            {
+                if (v.start > he.end)
+                {
+                    return  v;
+                }
+            }
+            return lshe[0];
+        }
+
+        static void MergeTwoHeapElem(ref HeapElem h1, ref HeapElem h2)
+        {
+            // We have 2 in the list
+            HeapStatElem hse = new HeapStatElem();
+            HeapElem he = new HeapElem();
+
+            he.spread = h1.spread + h2.spread;
+            he.start = h1.start;
+            he.end = h2.end;
+
+            hse.range_high_key = h2.hsElem.range_high_key;
+            hse.equal_rows = h2.hsElem.equal_rows;
+
+            hse.distint_range_rows = h1.hsElem.distint_range_rows + 1 + h2.hsElem.distint_range_rows;
+            hse.range_rows = h1.hsElem.range_rows + h1.hsElem.equal_rows + h2.hsElem.range_rows;
+            hse.average_range_rows = hse.range_rows / hse.distint_range_rows;
+
+            he.hsElem = hse;
+
+            List<float> lisError = new List<float>();
+
+            // Now that we will go from the start to the end
+            // indices, so that we can find out the error values
+            for (int j = he.start; j < he.end; j++)
+            {
+                float estimate = hse.average_range_rows;
+                float actual = dictCol[j];
+
+                float err = (estimate + 1) / (actual + 1);
+                if (err < 1)
+                {
+                    err = 1 / err;
+                }
+
+                lisError.Add(err);
+            }
+
+            lisError.Sort();
+            he.errorList = lisError;
+            // Now we will need to generate the sorted 
+            // list and find out the new metrics 
+
+            float prod1 = 0, sum1 = 0;
+            int k = 0;
+            for (int j = he.start; j < he.end; j++, k++)
+            {
+                float val = k * lisError[j];
+                prod1 += val;
+                sum1 += lisError[j];
+            }
+
+            k--;
+            float sumn = k * (k + 1) / 2;
+            float sumns = k * (k + 1) * (2 * k + 1) / 6;
+
+            float betanom = k * prod1 - sumn * sum1;
+            float betaden = k * (sumns) - sumn * sumn;
+
+            float betam = betanom / betaden;
+
+            float alphanom = sum1 * sumns - prod1 * sumn;
+            float alpha = alphanom / betaden;
+
+            h1.mergeend = he.end;
+            h1.mergestart = he.start;
+            h1.mergehsElemM = hse;
+            h1.mergeerrorList = lisError;
+            h1.mergeintercept = betam;
+            h1.mergeslope = alpha;
+            h1.mergespread = he.spread;
+        }
+
+
 
         static float CalculateEMQEsitmateFromHist(ref List<HeapStatElem> his, int val)
         {
