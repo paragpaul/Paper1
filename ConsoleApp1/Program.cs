@@ -22,7 +22,7 @@ namespace ConsoleApp1
         public const string dbName = "adw";
         public static float maxalpha = 0;
         public static float maxbeta = 0;
-        public static float contrib = 0.5f;
+        public static float contrib = 0.01f;
 
         public static int numSteps = 200;
 
@@ -58,8 +58,8 @@ namespace ConsoleApp1
 
             public float GetMergeNorm()
             {
-                float fin1 = mergeintercept / Program.maxalpha;
-                fin1 = fin1 * Program.contrib + ((1 - Program.contrib) * mergeslope)/Program.maxbeta;
+                float fin1 = mergeintercept / ((Program.maxalpha == 0) ? 1: Program.maxalpha);
+                fin1 = fin1 * Program.contrib + ((1 - Program.contrib) * mergeslope)/(Program.maxbeta == 0 ?1 :Program.maxbeta);
                 return fin1;
             }
 
@@ -293,7 +293,7 @@ namespace ConsoleApp1
                     }
 
                     List<StatStep> histLs = new List<StatStep>();
-                    CreateHistogramFromAlgorithm(colVal, histLs, 3);
+                    CreateHistogramFromAlgorithm(colVal, histLs, 2);
                     // We are working on the follow
                     //  we have te new histogram. We will now need to do the same estimation things
 
@@ -304,6 +304,7 @@ namespace ConsoleApp1
 
                     //Let us also see the errors that we are getting. 
                     newErroRate.Sort();
+                    Console.WriteLine("=================================================");
                     newErroRate.ForEach(Console.WriteLine);
 
                     csv = new StringBuilder();
@@ -545,10 +546,14 @@ namespace ConsoleApp1
             float alphanomo = sum2o * sumnso - prod1o * sumno;
             float alphao = alphanomo / betadeno;
 
-            if (alphao < maxalpha)
+            if (alphao > maxalpha)
             {
                 maxalpha = alphao;
 
+            }
+            if (betao > maxbeta)
+            {
+                maxbeta = betao;
             }
 
             heElem.intercept = alphao;

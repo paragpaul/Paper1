@@ -19,7 +19,7 @@ namespace ConsoleApp1
             //  Custom function with slope and intercept data. 
             // We checked with the following data.
 
-            return (int)(x.GetMergeNorm() -  (int)y.GetMergeNorm());   
+            return (int)(y.GetMergeNorm() -  (int)x.GetMergeNorm());   
         }
     }
 
