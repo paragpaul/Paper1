@@ -11,17 +11,17 @@ namespace ConsoleApp1
 {
     class Program
     {
-        public static SortedDictionary<int, int> dictCol = new SortedDictionary<int, int>();
+        public static SortedDictionary<float, int> dictCol = new SortedDictionary<float, int>();
 
         public const string TableName = "[Sales].[SalesOrderDetail]";
-        public const string ColName = "ProductId";
+        public const string ColName = "LineTotal";
         public const string statname1 = "stat1";
         public const string statname2 = "stat2";
         public const string statname3 = "stat3";
         public const string colName2 = "UnitPrice";
         public const string dbName = "adw";
         public static float maxalpha = 0;
-
+        public static float maxbeta = 0;
         public static float contrib = 0.5f;
 
         public static int numSteps = 200;
@@ -43,7 +43,7 @@ namespace ConsoleApp1
             public float GetNorm()
             {
                 float fin1 = intercept / Program.maxalpha;
-                fin1 = fin1 * Program.contrib + (1 - Program.contrib) * slope;
+                fin1 = fin1 * Program.contrib + ((1 - Program.contrib) * slope)/Program.maxbeta;
                 return fin1;
             }
 
@@ -59,12 +59,12 @@ namespace ConsoleApp1
             public float GetMergeNorm()
             {
                 float fin1 = mergeintercept / Program.maxalpha;
-                fin1 = fin1 * Program.contrib + (1 - Program.contrib) * mergeslope;
+                fin1 = fin1 * Program.contrib + ((1 - Program.contrib) * mergeslope)/Program.maxbeta;
                 return fin1;
             }
 
 
-            bool mergePossible;
+            public float mergenorm;
 
 
             public int CompareTo(object obj)
@@ -73,7 +73,7 @@ namespace ConsoleApp1
 
                 HeapElem otherTemperature = obj as HeapElem;
                 if (otherTemperature != null)
-                    return this.start - otherTemperature.start;
+                    return (int)this.GetMergeNorm() - (int)otherTemperature.GetMergeNorm();
                 else
                     throw new ArgumentException("Object is not a HeapElement");
             }
@@ -84,7 +84,7 @@ namespace ConsoleApp1
         public struct HeapStatElem
         {
 
-            public int range_high_key;
+            public float range_high_key;
             public float range_rows;
             public float equal_rows;
             public int distint_range_rows;
@@ -94,7 +94,7 @@ namespace ConsoleApp1
         public class StatStep
         {
             public int step_number;
-            public int range_high_key;
+            public float range_high_key;
             public float range_rows;
             public float equal_rows;
             public int distint_range_rows;
@@ -116,7 +116,7 @@ namespace ConsoleApp1
             try
             {
                 string folderName = @"C:\Work\Stats\Exper";
-                string dirName = DateTime.Now.ToString("MM.dd.yyyy_HH:mm_tt");
+                string dirName = DateTime.Now.ToString("MM_dd_yyyy_HH_mm_tt");
 
 
                 Random random = new Random();
@@ -187,7 +187,7 @@ namespace ConsoleApp1
                     // Create a Table and insert some sample data
                     Console.Write("Reading all the values in the table");
 
-                    List<Int32> colVal = new List<int>();
+                    List<float> colVal = new List<float>();
                     sql = String.Format("select {0} from {1}", ColName, TableName);
 
                     using (SqlCommand command = new SqlCommand(sql, connection))
@@ -197,7 +197,7 @@ namespace ConsoleApp1
                         {
                             while (reader.Read())
                             {
-                                int val = reader.GetInt32(0);
+                                float val = (float)reader.GetDecimal(0);
                                 colVal.Add(val);
 
                             }
@@ -228,7 +228,7 @@ namespace ConsoleApp1
                                 StatStep ss = new StatStep();
 
                                 ss.step_number = reader.GetInt32(0);
-                                ss.range_high_key = reader.GetInt32(1);
+                                ss.range_high_key = (float)reader.GetDecimal(1);
                                 ss.range_rows = reader.GetFloat(2);
                                 ss.equal_rows = reader.GetFloat(3);
                                 ss.distint_range_rows = int.Parse(reader["distinct_range_rows"].ToString());
@@ -242,14 +242,14 @@ namespace ConsoleApp1
                     // We have a list of stat steps, 
                     // Now use that for queries that we need
                     colVal.Sort();
-                    int min = colVal.First();
-                    int last = colVal.Last();
+                    float min = colVal.First();
+                    float last = colVal.Last();
 
                     List<Tuple<int, int>> rangeRows = new List<Tuple<int, int>>();
                     for (int i = 0; i < 300; i++)
                     {
-                        int val = random.Next(min, last - (int)(.3 * (last - min)));
-                        Tuple<int, int> ti = new Tuple<int, int>(val, random.Next(val + 1, last));
+                        int val = random.Next((int)min, (int)last - (int)(.3 * (last - min)));
+                        Tuple<int, int> ti = new Tuple<int, int>(val, random.Next(val + 1, (int)last));
                         rangeRows.Add(ti);
 
                     }
@@ -269,7 +269,7 @@ namespace ConsoleApp1
 
                     foreach (var v in erroriterator)
                     {
-                        var newLine = string.Format("{0},{1},{2}{3}", v.num, v.countAct, v.countStat, v.qE);
+                        var newLine = string.Format("{0},{1},{2},{3}", v.num, v.countAct, v.countStat, v.qE);
                         csv.AppendLine(newLine);
                     }
                     string fileNameForFirstStatErrorRate = "20PercDefaultSampleMain.csv";
@@ -310,7 +310,7 @@ namespace ConsoleApp1
 
                     foreach (var v in eeForNewIterator)
                     {
-                        var newLine = string.Format("{0},{1},{2}{3}", v.num, v.countAct, v.countStat, v.qE);
+                        var newLine = string.Format("{0},{1},{2},{3}", v.num, v.countAct, v.countStat, v.qE);
                         csv.AppendLine(newLine);
                     }
                     string fileNameForFirstStatErrorRateNew = "HistogramSampleMain.csv";
@@ -333,7 +333,7 @@ namespace ConsoleApp1
         // Have a mechanism to quickly create a error list for agiven range rows
         // for apples to apple comparion the random ranges need to be on the same value boundaries 
         // for the lower and the upper boundaries.
-        static void GetErrorList(List<Tuple<int, int>> rangeRows, List<int> colVal, List<float> errorRateList, List<ErrorListElem> erroriterator, List<StatStep> lisS)
+        static void GetErrorList(List<Tuple<int, int>> rangeRows, List<float> colVal, List<float> errorRateList, List<ErrorListElem> erroriterator, List<StatStep> lisS)
         {
             int num = 0;
             foreach (var tup in rangeRows)
@@ -364,12 +364,12 @@ namespace ConsoleApp1
 
         // This is the one that creates various histogram elements
         // from the values we already store and keep
-        static void CreateHistogramFromAlgorithm(List<int> colVal, List<StatStep> histLs, int num)
+        static void CreateHistogramFromAlgorithm(List<float> colVal, List<StatStep> histLs, int num)
         {
 
             //we  have the histogram
             int countHistInit = dictCol.Count();
-            List<int> keyEl = new List<int>(dictCol.Keys);
+            List<float> keyEl = new List<float>(dictCol.Keys);
 
 
             List<HeapStatElem> lhse = new List<HeapStatElem>();
@@ -383,7 +383,7 @@ namespace ConsoleApp1
             {
                 HeapStatElem hs = new HeapStatElem();
 
-                hs.range_high_key = keyEl[i * num] + num - 1;
+                hs.range_high_key = keyEl[i * num+ num - 1];
 
                 // For each histogram element , add their values in the q-error metric, which is a temporary thing
 
@@ -399,7 +399,7 @@ namespace ConsoleApp1
             }
 
             HeapStatElem hsElem = new HeapStatElem();
-            hsElem.equal_rows = dictCol[countHistInit - 1];
+            hsElem.equal_rows = dictCol[keyEl[countHistInit - 1]];
             hsElem.range_high_key = keyEl[countHistInit - 1];
             int tot = 0;
             int d = 0;
@@ -412,6 +412,7 @@ namespace ConsoleApp1
                 }
 
             }
+
             hsElem.range_rows = tot;
             hsElem.average_range_rows = tot / d;
             hsElem.distint_range_rows = d;
@@ -427,6 +428,7 @@ namespace ConsoleApp1
             List<float> qeList = new List<float>();
             List<HeapElem> heElemList = new List<HeapElem>();
             maxalpha = float.MinValue;
+            maxbeta = float.MinValue;
 
 
             foreach (var v in keyEl)
@@ -444,13 +446,13 @@ namespace ConsoleApp1
                 qeList.Add(qe);
             }
 
-            for (int i = 0; i < countHistInit / num - 1; i++)
+            for (int i = 0; i < countHistInit / num ; i++)
             {
                 HeapElem he = new HeapElem();
                 he.start = i * num;
                 he.end = (i + 1) * (num) - 1;
                 he.hsElem = lhse[i];
-                he.spread = (int)lhse[i].range_rows + 1;
+                he.spread = (int)lhse[i].range_rows + (int)lhse[i].equal_rows;
                 he.errorList = new List<float>();
 
                 float prod1 = 0, sum2 = 0, nls = 0, ls = 0;
@@ -459,15 +461,15 @@ namespace ConsoleApp1
                     he.errorList.Add(qeList[i * num + j]);
 
                 }
-
+                he.errorList.Sort();
                 for (int j = 0; j < num; j++)
 
                 {
-                    he.errorList.Sort();
-                    float val = (j + 1) * he.errorList[i * num + j];
+                    
+                    float val = (j + 1) * he.errorList[ j];
                     prod1 += val;
 
-                    sum2 += he.errorList[i * num + j];
+                    sum2 += he.errorList[j];
                 }
 
 
@@ -488,22 +490,30 @@ namespace ConsoleApp1
                 {
                     maxalpha = alpha;
                 }
+
+                if (beta > maxbeta)
+                {
+                    maxbeta = beta;
+                }
+
+                // We will get the merged norm, that we will need 
+                he.mergenorm = he.GetMergeNorm();
                 heElemList.Add(he);
                 // At the end of the three, we will need to find the beta and alpha
             }
 
             HeapElem heElem = new HeapElem();
             int c = 0;
-            heElem.start = (countHistInit / num - 1) * num;
+            heElem.start = (countHistInit / num) * num;
             heElem.end = countHistInit - 1;
 
-            heElem.hsElem = lhse[countHistInit / num - 1];
+            heElem.hsElem = lhse[countHistInit / num -1 ];
 
             float prod1o = 0, sum2o = 0, nlso = 0, lso = 0;
             heElem.errorList = new List<float>();
 
             // Now for the last bucket
-            for (int i = (countHistInit / num - 1) * num; i < countHistInit; i++)
+            for (int i = (countHistInit / num ) * num; i < countHistInit; i++)
             {
                 c++;
                 heElem.errorList.Add(qeList[i]);
@@ -514,13 +524,13 @@ namespace ConsoleApp1
             heElem.errorList.Sort();
 
 
-            for (int i = (countHistInit / num - 1) * num; i < countHistInit; i++)
+            for (int i = (countHistInit / num ) * num, k= 0; i < countHistInit; i++, k++)
             {
 
-                float val = c * heElem.errorList[i];
+                float val = (k+1) * heElem.errorList[k];
                 prod1o += val;
 
-                sum2o += heElem.errorList[i];
+                sum2o += heElem.errorList[k];
             }
 
             heElem.spread = c;
@@ -543,7 +553,7 @@ namespace ConsoleApp1
 
             heElem.intercept = alphao;
             heElem.slope = betao;
-
+            heElem.mergenorm = heElem.GetMergeNorm();
             heElemList.Add(heElem);
 
             // The list if ready, now, we need to build the Heap where the top element with the
@@ -598,17 +608,19 @@ namespace ConsoleApp1
                     }
                 }
 
-                if (k < heElemList.Count - 1)
+                if (k < heElemList.Count - 2)
                 {
                     // Now to merge it with the next element. 
                     MergeTwoHeapElem(heNew, heElemList[k + 2]);
+                    // We iwll keep removing it after every change.
+                    heElemList.RemoveAt(k + 1);
                 }
-                // We iwll keep removing it after every change.
-                heElemList.RemoveAt(k + 1);
+
+
 
                 foreach (var v in heapForWork)
                 {
-                    if (v.Key.end == he.start)
+                    if (v.Key.end +1 == he.start)
                     {
                         MergeTwoHeapElem(v.Key, heNew);
                         break;
@@ -653,6 +665,7 @@ namespace ConsoleApp1
 
         static void MergeTwoHeapElem(HeapElem h1, HeapElem h2)
         {
+            List<float> keyEl = new List<float>(dictCol.Keys);
             // We have 2 in the list
             HeapStatElem hse = new HeapStatElem();
             HeapElem he = new HeapElem();
@@ -674,10 +687,10 @@ namespace ConsoleApp1
 
             // Now that we will go from the start to the end
             // indices, so that we can find out the error values
-            for (int j = he.start; j < he.end; j++)
+            for (int j = he.start; j <= he.end; j++)
             {
                 float estimate = hse.average_range_rows;
-                float actual = dictCol[j];
+                float actual = dictCol[keyEl[j]];
 
                 float err = (estimate + 1) / (actual + 1);
                 if (err < 1)
@@ -695,14 +708,14 @@ namespace ConsoleApp1
 
             float prod1 = 0, sum1 = 0;
             int k = 0;
-            for (int j = he.start; j < he.end; j++, k++)
+            for (int j = he.start; j <= he.end; j++, k++)
             {
-                float val = k * lisError[j];
+                float val = (k+1) * lisError[k];
                 prod1 += val;
-                sum1 += lisError[j];
+                sum1 += lisError[k];
             }
 
-            k--;
+            
             float sumn = k * (k + 1) / 2;
             float sumns = k * (k + 1) * (2 * k + 1) / 6;
 
@@ -725,9 +738,9 @@ namespace ConsoleApp1
 
 
 
-        static float CalculateEMQEsitmateFromHist(ref List<HeapStatElem> his, int val)
+        static float CalculateEMQEsitmateFromHist(ref List<HeapStatElem> his, float val)
         {
-            int prevHi = Int32.MinValue;
+            float prevHi = Int32.MinValue;
 
             for (int i = 0; i < his.Count(); i++)
             {
@@ -748,7 +761,7 @@ namespace ConsoleApp1
         static int CalculateValuesFromHistogram(int low, int high, List<StatStep> lisS)
         {
             int totCount = 0;
-            int prevHi = Int32.MinValue;
+            float prevHi = Int32.MinValue;
 
             if (high == lisS[0].range_high_key)
             {
