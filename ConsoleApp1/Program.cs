@@ -115,7 +115,7 @@ namespace ConsoleApp1
         {
             try
             {
-                string folderName = @"C:\Work\Stats\Exper";
+                string folderName = @"D:\Work\Stats\Exper";
                 string dirName = DateTime.Now.ToString("MM_dd_yyyy_HH_mm_tt");
 
 
