@@ -5,7 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Data.SqlClient;
 using System.IO;
-
+using MathNet.Numerics.Distributions;
+using MathNet.Numerics.Random;
 
 namespace ConsoleApp1
 {
