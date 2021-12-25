@@ -27,10 +27,10 @@ namespace ConsoleApp1
         public const string dbName = "adw";
         public static double maxalpha = 0;
         public static double maxbeta = 0;
-        public static double contrib = 0.01f;
-        public static int STEPS = 200;
+        public static double contrib = 0.001f;
+        public static int STEPS = 20;
         public static int numSteps = 200;
-
+        public static int SAMPLECOUNT = 10000;
 
 
         // The heap tuple will have 2 of these and their spreads
@@ -113,12 +113,24 @@ namespace ConsoleApp1
         }
 
 
-        public class ErrorListElem
+        public class ErrorListElem : IComparable
         {
             public double countStat;
             public double countAct;
             public int num;
             public double qE;
+
+            int IComparable.CompareTo(object obj)
+            {
+                ErrorListElem c = (ErrorListElem)obj;
+                if (this.qE < c.qE)
+                    return 1;
+                else if (this.qE > c.qE)
+                    return -1;
+
+                return 0;
+            }
+
         }
 
         public readonly Random _random = new Random();
@@ -132,9 +144,9 @@ namespace ConsoleApp1
 
                 var gamma = new Gamma(2.0, 1.5, new MersenneTwister());
                 Random random = new Random();
-                LogNormal estimation = LogNormal.Estimate(Enumerable.Repeat(0, 550).Select(i => random.NextDouble() * 55.0).ToArray());
+                LogNormal estimation = LogNormal.Estimate(Enumerable.Repeat(0, 134550).Select(i => random.NextDouble() * 55.0).ToArray());
 
-                List<int> interim = estimation.Samples().Take(10000).Select(n => (int)n * new Random().Next(500)).ToList();
+                List<int> interim = estimation.Samples().Take(SAMPLECOUNT).Select(n => (int)n * new Random().Next(500)).ToList();
                 List<double> colVal = interim.ConvertAll(x => (double)x);
 
                 // We have a list of stat steps, 
@@ -180,7 +192,7 @@ namespace ConsoleApp1
                     sumTotal += dictCol[val];
                 }
 
-                Histogram h = CreateHistogramFromEquiWidthh(colVal, lisEquiDepth, sumTotal);
+                Histogram h = CreateHistogramFromEquiWidth(colVal, lisEquiDepth, sumTotal);
 
 
 
@@ -221,7 +233,12 @@ namespace ConsoleApp1
                     csv.AppendLine(newLine);
                 }
 
-                string fileNameForFirstStatErrorRate = "20PercDefaultSampleMain.csv";
+                string fileNameForFirstStatErrorRate = "EquiWidthHistogramMain.csv";
+                if (!Directory.Exists(FoldToCreateFiles))
+                {
+                    Directory.CreateDirectory(FoldToCreateFiles);
+                }
+
                 string Fullname = Path.Combine(FoldToCreateFiles, fileNameForFirstStatErrorRate);
 
                 //after your loop
@@ -296,11 +313,12 @@ namespace ConsoleApp1
                 erroriterator.Add(ee);
             }
 
+            erroriterator.Sort();
         }
 
         // Have some random numbers, based on a distribution
         // Now create the 
-        static Histogram CreateHistogramFromEquiWidthh(List<double> colVal, List<StatStep> listS, int sumTotal)
+        static Histogram CreateHistogramFromEquiWidth(List<double> colVal, List<StatStep> listS, int sumTotal)
         {
             //we  have the histogram
             int countHistInit = dictCol.Count();
@@ -308,13 +326,13 @@ namespace ConsoleApp1
             {
                 Debug.Assert(false, "Had less than 200 values in the steps");
                 // we have very low number of distinct values and this will not be good enough for a stat measure
-                return;
+                return null;
             }
             List<double> keyEl = new List<double>(dictCol.Keys);
             keyEl.Sort();
             Histogram h = new Histogram(colVal, STEPS);
 
-            StatStep current;
+            StatStep current = new StatStep();
             current.range_high_key = -1;
 
             for (int i = 0; i < h.BucketCount; i++)
@@ -325,23 +343,14 @@ namespace ConsoleApp1
                 // THis will be returned for caculation
                 StatStep ss = new StatStep();
                 int upperbound = Convert.ToInt32(b.UpperBound);
-                if (dictCol[upperbound] == 0)
+                if (!keyEl.Contains(upperbound))
                 {
-                    for (int j = 0; j < 1000; j++)
+                    int prev = 0;
+                    foreach (var k in keyEl)
                     {
-                        if (dictCol[upperbound - j] > 0)
+                        if (k >= upperbound)
                         {
-                            if (upperbound - j > current.range_high_key)
-                            {
-                                upperbound = upperbound - j;
-                                break;
-                            }
-                        }
-
-                        if (dictCol[upperbound + j] > 0)
-                        {
-
-                            upperbound = upperbound + j;
+                            upperbound = Convert.ToInt32(k);
                             break;
                         }
                     }
@@ -357,6 +366,9 @@ namespace ConsoleApp1
                         {
                             ss.distint_range_rows++;
                         }
+
+                        if (l >= upperbound)
+                            break;
                     }
 
                     if (ss.distint_range_rows > 0)
@@ -365,8 +377,27 @@ namespace ConsoleApp1
 
 
                     // Now add the new stat step that was created 
-                    
+                    listS.Add(ss);
                 }
+                else
+                {
+                    ss.range_high_key = upperbound;
+                    ss.range_rows = Convert.ToInt32(b.Count) - dictCol[upperbound];
+                    ss.equal_rows = dictCol[upperbound];
+                    // We havd a genuine upper bound now
+                    foreach (var l in keyEl)
+                    {
+                        if (l > current.range_high_key && l < upperbound)
+                        {
+                            ss.distint_range_rows++;
+                        }
+                    }
+
+                    if (ss.distint_range_rows > 0)
+                        ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                }
+
+                current = ss;
 
             }
 
@@ -400,7 +431,6 @@ namespace ConsoleApp1
                 hs.range_high_key = keyEl[i * num + num - 1];
 
                 // For each histogram element , add their values in the q-error metric, which is a temporary thing
-
                 for (int j = 0; j < num - 1; j++)
                 {
                     hs.range_rows += dictCol[keyEl[i * num + j]];
@@ -461,29 +491,31 @@ namespace ConsoleApp1
                 qeList.Add(qe);
             }
 
-            for (int i = 0; i < countHistInit / num; i++)
+            for (int i = 0; i < lhse.Count() / num; i++)
             {
                 HeapElem he = new HeapElem();
                 he.start = i * num;
                 he.end = (i + 1) * (num) - 1;
-                he.hsElem = lhse[i];
-                he.spread = (int)lhse[i].range_rows + (int)lhse[i].equal_rows;
+                he.hsElem = lhse[he.end];
+
                 he.errorList = new List<double>();
 
                 double prod1 = 0, sum2 = 0, nls = 0, ls = 0;
                 for (int j = 0; j < num; j++)
                 {
+                    he.spread += (int)lhse[i * num + j].range_rows + (int)lhse[i * num + j].equal_rows;
                     he.errorList.Add(qeList[i * num + j]);
 
                 }
 
                 he.errorList.Sort();
 
+                // From the error list, form the slope and intercept
+                // using the OLS formula for slope and intercept
                 for (int j = 0; j < num; j++)
                 {
                     double val = (j + 1) * he.errorList[j];
                     prod1 += val;
-
                     sum2 += he.errorList[j];
                 }
 
@@ -493,10 +525,14 @@ namespace ConsoleApp1
                 double betanom = num * prod1 - (sumn) * sum2;
                 double betaden = num * sumns - (sumn) * (sumn);
                 double beta = betanom / betaden;
-
+                /*
                 double alphanom = prod1 * sumns - sum2 * sumn;
                 double alphaden = betaden;
+                
                 double alpha = alphanom / alphaden;
+                */
+
+                double alpha = sum2 / num - (beta * (sumn / num));
 
                 he.intercept = alpha;
                 he.slope = beta;
@@ -527,17 +563,16 @@ namespace ConsoleApp1
             double prod1o = 0, sum2o = 0, nlso = 0, lso = 0;
             heElem.errorList = new List<double>();
 
+            heElem.spread += (int)heElem.hsElem.range_rows + (int)heElem.hsElem.equal_rows;
+
             // Now for the last bucket
             for (int i = (countHistInit / num) * num; i < countHistInit; i++)
             {
                 c++;
                 heElem.errorList.Add(qeList[i]);
 
-
             }
-
             heElem.errorList.Sort();
-
 
             for (int i = (countHistInit / num) * num, k = 0; i < countHistInit; i++, k++)
             {
@@ -559,6 +594,8 @@ namespace ConsoleApp1
 
             double alphanomo = sum2o * sumnso - prod1o * sumno;
             double alphao = alphanomo / betadeno;
+
+            alphao = sum2o / num - (betao * (sumno / num));
 
             if (alphao > maxalpha)
             {
@@ -588,17 +625,26 @@ namespace ConsoleApp1
                 MergeTwoHeapElem(h1, h2);
                 // We have for nodes, their merged values.
 
-            }
-            // Heap Elem List has all the heaps with their mergeability information defined. 
+                // So starting with index = 0 all the way till the n-2
+                // we will merge with the next one and find the merged norm
+                // This will give us a normalized value for the slope
+                // and that will help with finding the one with the lowest
+                // slope , that we are targetting.
 
-            Heap.PriorityQueue<HeapElem, Tuple<double, double>> heapForWork = new Heap.PriorityQueue<HeapElem, Tuple<double, double>>();
+            }
+
+            // Heap Elem List has all the heaps with their mergeability information defined. 
+            MyComparer mc = new MyComparer(); ;
+            Heap.PriorityQueue<HeapElem, Tuple<double, double>> heapForWork = new Heap.PriorityQueue<HeapElem, Tuple<double, double>>(mc);
+
+            // THe custom comparer will always look at the merged norms
             for (int i = 0; i < heElemList.Count - 1; i++)
             {
                 heapForWork.Enqueue(heElemList[i], new Tuple<double, double>(heElemList[i].mergeslope, heElemList[i].mergeintercept));
             }
 
             // At this point the heap is ready. Now pop and keep merging till the end.
-            while (heapForWork.Count > STEPS)
+            while (heElemList.Count > STEPS)
             {
                 HeapElem he = heapForWork.Dequeue().Key;
 
@@ -630,12 +676,16 @@ namespace ConsoleApp1
                 if (k < heElemList.Count - 2)
                 {
                     // Now to merge it with the next element. 
+                    // This will be 1 past the next one. 
                     MergeTwoHeapElem(heNew, heElemList[k + 2]);
+
+                }
+
+                if (k + 1 < heElemList.Count)
+                {
                     // We iwll keep removing it after every change.
                     heElemList.RemoveAt(k + 1);
                 }
-
-
 
                 foreach (var v in heapForWork)
                 {
@@ -659,9 +709,9 @@ namespace ConsoleApp1
                 StatStep ss = new StatStep();
                 ss.average_range_rows = v.hsElem.average_range_rows;
                 ss.distint_range_rows = v.hsElem.distint_range_rows;
-                ss.equal_rows = v.hsElem.equal_rows;
-                ss.range_high_key = v.hsElem.range_high_key;
-                ss.range_rows = v.hsElem.range_rows;
+                ss.equal_rows = Convert.ToInt32(v.hsElem.equal_rows);
+                ss.range_high_key = Convert.ToInt32(v.hsElem.range_high_key);
+                ss.range_rows = Convert.ToInt32(v.hsElem.range_rows);
                 histLs.Add(ss);
 
             }
@@ -697,6 +747,8 @@ namespace ConsoleApp1
             hse.range_high_key = h2.hsElem.range_high_key;
             hse.equal_rows = h2.hsElem.equal_rows;
 
+            // Add 1 for the h1.hsElem top equal rows
+            // h1.rangerows would have already taken into account all the equal rows till now.
             hse.distint_range_rows = h1.hsElem.distint_range_rows + 1 + h2.hsElem.distint_range_rows;
             hse.range_rows = h1.hsElem.range_rows + h1.hsElem.equal_rows + h2.hsElem.range_rows;
             hse.average_range_rows = hse.range_rows / hse.distint_range_rows;
@@ -723,9 +775,9 @@ namespace ConsoleApp1
 
             lisError.Sort();
             he.errorList = lisError;
+
             // Now we will need to generate the sorted 
             // list and find out the new metrics 
-
             double prod1 = 0, sum1 = 0;
             int k = 0;
             for (int j = he.start; j <= he.end; j++, k++)
@@ -746,13 +798,28 @@ namespace ConsoleApp1
 
             double alphanom = sum1 * sumns - prod1 * sumn;
             double alpha = alphanom / betaden;
+            alpha = sum1 / k - (betam * (sumn / k));
+
+            // If we dont update the merged max alpha
+            // and the merged maxbeta , then we will not be able
+            // to normalize and get the latest values for merge norm
+
+            if (alpha > maxalpha)
+            {
+                maxalpha = alpha;
+
+            }
+            if (betam > maxbeta)
+            {
+                maxbeta = betam;
+            }
 
             h1.mergeend = he.end;
             h1.mergestart = he.start;
             h1.mergehsElemM = hse;
             h1.mergeerrorList = lisError;
-            h1.mergeintercept = betam;
-            h1.mergeslope = alpha;
+            h1.mergeintercept = alpha;
+            h1.mergeslope = betam;
             h1.mergespread = he.spread;
         }
 

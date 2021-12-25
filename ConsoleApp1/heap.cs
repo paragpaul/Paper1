@@ -19,7 +19,16 @@ namespace ConsoleApp1
             //  Custom function with slope and intercept data. 
             // We checked with the following data.
 
-            return (int)(y.GetMergeNorm() -  (int)x.GetMergeNorm());   
+            if (y.GetMergeNorm() > x.GetMergeNorm())
+            {
+                return -1;
+            }
+            else if (y.GetMergeNorm() < x.GetMergeNorm())
+            {
+                return 1;
+            }
+
+            return 0;
         }
     }
 
@@ -375,7 +384,7 @@ namespace ConsoleApp1
             }
 
 
-     
+
 
             /// <summary>
             /// Removes the first occurrence of a specific object from the priority queue. 
