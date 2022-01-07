@@ -28,7 +28,7 @@ namespace ConsoleApp1
         public static double maxalpha = 0;
         public static double maxbeta = 0;
         public static double minalpha = 0;
-        public static double contrib = 0.01f;
+        public static double contrib = 0.00f;
         public static int STEPS = 20;
         public static int numSteps = 200;
         public static int SAMPLECOUNT = 10000;
@@ -144,6 +144,7 @@ namespace ConsoleApp1
         public readonly Random _random = new Random();
         static void Main(string[] args)
         {
+            int readFromFile = 0;
             try
             {
                 string folderName = @"D:\Work\Stats\Exper";
@@ -151,7 +152,7 @@ namespace ConsoleApp1
                 string FoldToCreateFiles = Path.Combine(folderName, dirName);
 
                 var gamma = new Gamma(2.0, 1.5, new MersenneTwister());
-                Random random = new Random();
+                Random random = new Random(111);
                 LogNormal estimation = LogNormal.Estimate(Enumerable.Repeat(0, 134550).Select(i => random.NextDouble() * 55.0).ToArray());
 
                 List<int> interim = estimation.Samples().Take(SAMPLECOUNT).Select(n => (int)n * new Random().Next(500)).ToList();
@@ -162,13 +163,26 @@ namespace ConsoleApp1
                 colVal.Sort();
                 double min = colVal.First();
                 double last = colVal.Last();
+                string quickFile = Path.Combine(folderName, "allvalues.csv");
+                if (false)
+                {
+                    quickFile = Path.Combine(folderName, "allvalues.csv");
+
+                    File.WriteAllText(quickFile, String.Join(",", colVal));
+                    return;
+                }
+
+
+                colVal.Clear();
+                char[] delim = { ',' };
+                colVal = File.ReadAllText(quickFile).Split(delim).Select(Double.Parse).ToList();
 
                 // Now create some rangeRow queries
 
                 List<Tuple<int, int>> rangeRows = new List<Tuple<int, int>>();
-                for (int i = 0; i < 300; i++)
+                for (int i = 0; i < 1000; i++)
                 {
-                    int val = random.Next((int)min, (int)last - (int)(.3 * (last - min)));
+                    int val = random.Next((int)min, (int)last - (int)(.8 * (last - min)));
                     Tuple<int, int> ti = new Tuple<int, int>(val, random.Next(val + 1, (int)last));
                     rangeRows.Add(ti);
                 }
@@ -252,6 +266,9 @@ namespace ConsoleApp1
                 //after your loop
                 File.WriteAllText(Fullname, csv.ToString());
 
+
+                // This is the portion where the actual magic happens 
+                // from within the algorithm
                 List<StatStep> histLs = new List<StatStep>();
                 CreateHistogramFromAlgorithm(colVal, histLs, 2);
                 // We are working on the follow
@@ -669,6 +686,7 @@ namespace ConsoleApp1
             for (int i = 0; i < heElemList.Count - 1; i++)
             {
                 heapForWork.Enqueue(heElemList[i], new Tuple<double, double>(heElemList[i].mergeslope, heElemList[i].mergeintercept));
+
             }
 
             // A quick sanity check
@@ -695,11 +713,19 @@ namespace ConsoleApp1
                 prevs = he.start;
                 preve = he.end;
                 elecnt++;
+
+                //if (he.start == 342)
+                //{
+                //    int a = 10;
+                //}
             }
 
+            int heapCount = 0;
             // At this point the heap is ready. Now pop and keep merging till the end.
             while (heElemList.Count > STEPS)
             {
+                heapCount += 1;
+
                 HeapElem he = heapForWork.Dequeue().Key;
 
                 // We got the he elem, now the hard work of the merged one to be inserted.
@@ -722,6 +748,12 @@ namespace ConsoleApp1
                     if (heElemList[i].start > he.end)
                     {
                         k = i;
+
+                        //if (heElemList[i - 1].start == 340)
+                        //{
+                        //    int a = 10;
+                        //}
+
                         heElemList[i - 1] = heNew;
                         break;
                     }
@@ -731,19 +763,38 @@ namespace ConsoleApp1
                 {
                     // Now to merge it with the next element. 
                     // This will be 1 past the next one. 
+
                     MergeTwoHeapElem(heNew, heElemList[k + 1]);
+                    heapForWork.Enqueue(heNew, new Tuple<double, double>(heNew.mergeslope, heNew.mergeintercept));
 
                 }
 
                 if (k < heElemList.Count)
                 {
+                    //if (heElemList[k].start == 340)
+                    //{
+                    //    int a = 10;
+                    //}
+
+                    if (k+1 < heElemList.Count &&
+                        heapForWork.Contains(new KeyValuePair<HeapElem, Tuple<double, double>>(heElemList[k], new Tuple<double, double>(heElemList[k].mergeslope, heElemList[k].mergeintercept))))
+                    {
+                        heapForWork.Remove(new KeyValuePair<HeapElem, Tuple<double, double>>(heElemList[k], new Tuple<double, double>(heElemList[k].mergeslope, heElemList[k].mergeintercept)));
+                    }
+                    else if (k+1 < heElemList.Count)
+                    {
+                        int a = 10;
+                    }
+
                     // We will keep removing it after every change.
                     heElemList.RemoveAt(k);
+
                 }
 
-                if (k>1 && heElemList[k-1)
+                if (k > 1 && k < heElemList.Count &&
+                    heElemList[k - 1].end + 1 != heElemList[k].start)
                 {
-
+                    int a = 10;
                 }
 
                 // Now do a quick check
@@ -762,7 +813,21 @@ namespace ConsoleApp1
 
                 if (k > 1)
                 {
+                    var into1 = new KeyValuePair<HeapElem, Tuple<double, double>>(heElemList[k-2], new Tuple<double, double>(heElemList[k-2].mergeslope, heElemList[k-2].mergeintercept));
+                    if(heapForWork.Contains(into1))
+                    {
+                        heapForWork.Remove(into1);
+                    }
+                    else
+                    {
+                        int a = 10;
+                    }
+
                     MergeTwoHeapElem(heElemList[k - 2], heElemList[k - 1]);
+ 
+                    // Once we have modified te k-1 element, that means, that the k-2 guy should have updated merge values. 
+                    // For the algorithm to keep getting the reai and latest values, this is needed.
+                    heapForWork.Enqueue(heElemList[k-2], new Tuple<double, double>(heElemList[k-2].mergeslope, heElemList[k-2].mergeintercept));
                     // So both the sides are merged and we can have them in the heap inserted back again.
                 }
             }
