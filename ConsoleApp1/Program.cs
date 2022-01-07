@@ -27,7 +27,8 @@ namespace ConsoleApp1
         public const string dbName = "adw";
         public static double maxalpha = 0;
         public static double maxbeta = 0;
-        public static double contrib = 0.001f;
+        public static double minalpha = 0;
+        public static double contrib = 0.01f;
         public static int STEPS = 20;
         public static int numSteps = 200;
         public static int SAMPLECOUNT = 10000;
@@ -47,7 +48,13 @@ namespace ConsoleApp1
 
             public double GetNorm()
             {
-                double fin1 = intercept / Program.maxalpha;
+                // if all the intercepts are of same value, then the programs maxalpha and min alpha will be the same
+                // and that will mean there is a possibility of division by 0
+                // stopping that possiblity by normalizing it.
+                double fin1 = (intercept - Program.minalpha) / (Program.maxalpha != Program.minalpha ? (Program.maxalpha - Program.minalpha) : 1);
+
+                // Older interpreation of the interecpt ws wrong.
+                //double fin1 = intercept / Program.maxalpha;
                 fin1 = fin1 * Program.contrib + ((1 - Program.contrib) * slope) / Program.maxbeta;
                 return fin1;
             }
@@ -63,7 +70,8 @@ namespace ConsoleApp1
 
             public double GetMergeNorm()
             {
-                double fin1 = mergeintercept / ((Program.maxalpha == 0) ? 1 : Program.maxalpha);
+                double fin1 = (mergeintercept - Program.minalpha) / (Program.maxalpha != Program.minalpha ? (Program.maxalpha - Program.minalpha) : 1);
+
                 fin1 = fin1 * Program.contrib + ((1 - Program.contrib) * mergeslope) / (Program.maxbeta == 0 ? 1 : Program.maxbeta);
                 return fin1;
             }
@@ -474,7 +482,7 @@ namespace ConsoleApp1
             List<HeapElem> heElemList = new List<HeapElem>();
             maxalpha = double.MinValue;
             maxbeta = double.MinValue;
-
+            minalpha = double.MaxValue;
 
             foreach (var v in keyEl)
             {
@@ -491,19 +499,22 @@ namespace ConsoleApp1
                 qeList.Add(qe);
             }
 
-            for (int i = 0; i < lhse.Count() / num; i++)
+            for (int i = 0; i < lhse.Count() - 1; i++)
             {
                 HeapElem he = new HeapElem();
                 he.start = i * num;
                 he.end = (i + 1) * (num) - 1;
-                he.hsElem = lhse[he.end];
+                he.hsElem = lhse[i];
 
                 he.errorList = new List<double>();
 
                 double prod1 = 0, sum2 = 0, nls = 0, ls = 0;
+                he.spread = (int)lhse[i].range_rows + (int)lhse[i].equal_rows;
+
+
                 for (int j = 0; j < num; j++)
                 {
-                    he.spread += (int)lhse[i * num + j].range_rows + (int)lhse[i * num + j].equal_rows;
+
                     he.errorList.Add(qeList[i * num + j]);
 
                 }
@@ -535,11 +546,19 @@ namespace ConsoleApp1
                 double alpha = sum2 / num - (beta * (sumn / num));
 
                 he.intercept = alpha;
+                he.mergeintercept = alpha;
                 he.slope = beta;
 
                 if (alpha > maxalpha)
                 {
                     maxalpha = alpha;
+                }
+
+                // This is needed for finding the normalized value for the alpha
+                // so that we can use to find the contri and norm in a proepr fashion
+                if (alpha < minalpha)
+                {
+                    minalpha = alpha;
                 }
 
                 if (beta > maxbeta)
@@ -555,10 +574,12 @@ namespace ConsoleApp1
 
             HeapElem heElem = new HeapElem();
             int c = 0;
-            heElem.start = (countHistInit / num) * num;
-            heElem.end = countHistInit - 1;
+            int index = lhse.Count() - 1;
 
-            heElem.hsElem = lhse[countHistInit / num - 1];
+            heElem.start = index * num;
+            heElem.end = (index + 1) * num - 1;
+
+            heElem.hsElem = lhse[index];
 
             double prod1o = 0, sum2o = 0, nlso = 0, lso = 0;
             heElem.errorList = new List<double>();
@@ -602,12 +623,19 @@ namespace ConsoleApp1
                 maxalpha = alphao;
 
             }
+
+            if (alphao < minalpha)
+            {
+                minalpha = alphao;
+            }
+
             if (betao > maxbeta)
             {
                 maxbeta = betao;
             }
 
             heElem.intercept = alphao;
+            heElem.mergeintercept = alphao;
             heElem.slope = betao;
             heElem.mergenorm = heElem.GetMergeNorm();
             heElemList.Add(heElem);
@@ -643,6 +671,32 @@ namespace ConsoleApp1
                 heapForWork.Enqueue(heElemList[i], new Tuple<double, double>(heElemList[i].mergeslope, heElemList[i].mergeintercept));
             }
 
+            // A quick sanity check
+            // check that every start for a heap element is right before 
+            // the start for the next
+            int prevs = 0, preve = 0;
+            int elecnt = 0;
+            foreach (var he in heElemList)
+            {
+                if (elecnt == 0)
+                {
+                    prevs = he.start;
+                    preve = he.end;
+                    elecnt++;
+                    continue;
+                }
+
+                if (he.start != preve + 1)
+                {
+                    // we have an issue here
+                    int a = 10;
+                }
+
+                prevs = he.start;
+                preve = he.end;
+                elecnt++;
+            }
+
             // At this point the heap is ready. Now pop and keep merging till the end.
             while (heElemList.Count > STEPS)
             {
@@ -651,9 +705,9 @@ namespace ConsoleApp1
                 // We got the he elem, now the hard work of the merged one to be inserted.
 
                 HeapElem heNew = new HeapElem();
-                HeapStatElem hs = new HeapStatElem();
+
                 heNew.hsElem = he.mergehsElemM;
-                heNew.intercept = he.mergeintercept;
+
                 heNew.slope = he.mergeslope;
                 heNew.intercept = he.mergeintercept;
                 heNew.errorList = he.mergeerrorList;
@@ -668,35 +722,49 @@ namespace ConsoleApp1
                     if (heElemList[i].start > he.end)
                     {
                         k = i;
-                        heElemList[i] = heNew;
+                        heElemList[i - 1] = heNew;
                         break;
                     }
                 }
 
-                if (k < heElemList.Count - 2)
+                if (k < heElemList.Count - 1)
                 {
                     // Now to merge it with the next element. 
                     // This will be 1 past the next one. 
-                    MergeTwoHeapElem(heNew, heElemList[k + 2]);
+                    MergeTwoHeapElem(heNew, heElemList[k + 1]);
 
                 }
 
-                if (k + 1 < heElemList.Count)
+                if (k < heElemList.Count)
                 {
-                    // We iwll keep removing it after every change.
-                    heElemList.RemoveAt(k + 1);
+                    // We will keep removing it after every change.
+                    heElemList.RemoveAt(k);
                 }
 
-                foreach (var v in heapForWork)
+                if (k>1 && heElemList[k-1)
                 {
-                    if (v.Key.end + 1 == he.start)
-                    {
-                        MergeTwoHeapElem(v.Key, heNew);
-                        break;
-                    }
+
                 }
 
-                // So both the sides are merged and we can have them in the heap inserted back again.
+                // Now do a quick check
+                if (k > 1 && k < heElemList.Count &&
+                    heElemList[k - 2].end + 1 != heElemList[k - 1].start)
+                {
+                    // we have an issue
+                    int a = 10;
+                }
+
+                if (k < heElemList.Count - 1 && heElemList[k].end + 1 != heElemList[k + 1].start)
+                {
+                    // we have another problem
+                    int a = 10;
+                }
+
+                if (k > 1)
+                {
+                    MergeTwoHeapElem(heElemList[k - 2], heElemList[k - 1]);
+                    // So both the sides are merged and we can have them in the heap inserted back again.
+                }
             }
 
             // At this point, we will have merged a few cases here and here
@@ -761,7 +829,8 @@ namespace ConsoleApp1
             // indices, so that we can find out the error values
             for (int j = he.start; j <= he.end; j++)
             {
-                double estimate = hse.average_range_rows;
+                double estimate = (j < he.end) ? hse.average_range_rows : hse.equal_rows;
+
                 double actual = dictCol[keyEl[j]];
 
                 double err = (estimate + 1) / (actual + 1);
@@ -809,6 +878,16 @@ namespace ConsoleApp1
                 maxalpha = alpha;
 
             }
+
+            // Even when we are merging, we need
+            // to make sure that the max and min are taken care of
+            // since the heap can have a mix of min and maxes from 
+            // merged as well as unmerged cases
+            if (alpha < minalpha)
+            {
+                minalpha = alpha;
+            }
+
             if (betam > maxbeta)
             {
                 maxbeta = betam;
