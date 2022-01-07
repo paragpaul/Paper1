@@ -76,6 +76,21 @@ namespace ConsoleApp1
                 return fin1;
             }
 
+            public double GetMergeNorm2()
+            {
+                double fin1 = (mergeintercept - Program.minalpha) / (Program.maxalpha != Program.minalpha ? (Program.maxalpha - Program.minalpha) : 1);
+
+                fin1 = fin1 * Program.contrib + ((1 - Program.contrib) * mergeslope) / (Program.maxbeta == 0 ? 1 : Program.maxbeta);
+                return fin1;
+            }
+
+            public double GetMergeInterceptNorm()
+            {
+                double fin1 = (mergeintercept - Program.minalpha) / (Program.maxalpha != Program.minalpha ? (Program.maxalpha - Program.minalpha) : 1);
+
+                return fin1;
+            }
+
 
             public double mergenorm;
 

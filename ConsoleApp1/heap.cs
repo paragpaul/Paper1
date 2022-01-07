@@ -19,13 +19,40 @@ namespace ConsoleApp1
             //  Custom function with slope and intercept data. 
             // We checked with the following data.
 
-            if (y.GetMergeNorm() > x.GetMergeNorm())
+            double yNorm = y.GetMergeNorm();
+            double xNorm = x.GetMergeNorm();
+            double xInterceptNorm = x.GetMergeInterceptNorm();
+            double yInterceptNorm = y.GetMergeInterceptNorm();
+
+            if (yNorm > xNorm)
             {
-                return -1;
+                if (yInterceptNorm >= xInterceptNorm)
+                    return -1;
+                else
+                {
+                    if (yNorm / xNorm > yInterceptNorm / xInterceptNorm)
+                        return -1;
+                    else
+                        return 1;
+                }
             }
-            else if (y.GetMergeNorm() < x.GetMergeNorm())
+            else if (yNorm < xNorm )
             {
-                return 1;
+                if (yInterceptNorm < xInterceptNorm)
+                {
+                    return 1;
+                }
+                else
+                {
+                    if (yInterceptNorm/xInterceptNorm > xNorm/yNorm)
+                    {
+                        return -1;
+                    }
+                    else
+                    {
+                        return 1;
+                    }
+                }
             }
 
             return 0;
