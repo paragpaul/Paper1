@@ -28,10 +28,14 @@ namespace ConsoleApp1
         public static double maxalpha = 0;
         public static double maxbeta = 0;
         public static double minalpha = 0;
-        public static double contrib = 0.00f;
+        public static double contrib = 0.01f;
         public static int STEPS = 20;
-        public static int numSteps = 200;
-        public static int SAMPLECOUNT = 10000;
+
+        public static int SAMPLECOUNT = 1000;
+        public static int RANGENUM = 200;
+        public static double[] SumAll = new double[SAMPLECOUNT];
+        public static double[,] ErrorValues = new double[SAMPLECOUNT, SAMPLECOUNT];
+
 
 
         // The heap tuple will have 2 of these and their spreads
@@ -173,9 +177,22 @@ namespace ConsoleApp1
                 List<int> interim = estimation.Samples().Take(SAMPLECOUNT).Select(n => (int)n * new Random().Next(500)).ToList();
                 List<double> colVal = interim.ConvertAll(x => (double)x);
 
+
+
                 // We have a list of stat steps, 
                 // Now use that for queries that we need
+
+
                 colVal.Sort();
+
+
+                // Need to create a sum list which helps with 
+                // fast calcualtions later on
+                for (int i = 0; i < SAMPLECOUNT; i++)
+                {
+                    SumAll[i] = (i == 0) ? colVal[i] : (SumAll[i - 1] + colVal[i]);
+                }
+
                 double min = colVal.First();
                 double last = colVal.Last();
                 string quickFile = Path.Combine(folderName, "allvalues.csv");
@@ -184,22 +201,51 @@ namespace ConsoleApp1
                     quickFile = Path.Combine(folderName, "allvalues.csv");
 
                     File.WriteAllText(quickFile, String.Join(",", colVal));
-                    return;
                 }
 
-
-                colVal.Clear();
-                char[] delim = { ',' };
-                colVal = File.ReadAllText(quickFile).Split(delim).Select(Double.Parse).ToList();
+                if (false)
+                {
+                    colVal.Clear();
+                    char[] delim = { ',' };
+                    colVal = File.ReadAllText(quickFile).Split(delim).Select(Double.Parse).ToList();
+                }
 
                 // Now create some rangeRow queries
-
+                string quickFileForRanges = Path.Combine(folderName, "rangevlaue.csv");
                 List<Tuple<int, int>> rangeRows = new List<Tuple<int, int>>();
-                for (int i = 0; i < 1000; i++)
+                if (false)
                 {
-                    int val = random.Next((int)min, (int)last - (int)(.8 * (last - min)));
-                    Tuple<int, int> ti = new Tuple<int, int>(val, random.Next(val + 1, (int)last));
-                    rangeRows.Add(ti);
+                    string[] lines = System.IO.File.ReadAllLines(quickFileForRanges);
+
+                    foreach (var l in lines)
+                    {
+                        string[] join = l.Split(new char[] { ',' });
+                        Tuple<int, int> ti = new Tuple<int, int>(Convert.ToInt32(join[0]), Convert.ToInt32(join[1]));
+                        rangeRows.Add(ti);
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < RANGENUM; i++)
+                    {
+                        int val = random.Next((int)min, (int)last - (int)(.8 * (last - min)));
+                        Tuple<int, int> ti = new Tuple<int, int>(val, random.Next(val + 1, (int)last));
+                        rangeRows.Add(ti);
+                    }
+                }
+
+                if (false)
+                {
+
+                    File.WriteAllText(quickFileForRanges, "");
+                    StreamWriter swq = File.AppendText(quickFileForRanges);
+
+                    foreach (var va in rangeRows)
+                    {
+                        swq.WriteLine(string.Format("{0} , {1}", va.Item1, va.Item2));
+                    }
+
+                    return;
                 }
 
                 List<double> errorRateList = new List<double>();
@@ -209,6 +255,9 @@ namespace ConsoleApp1
 
                 // Create a list of steps.
                 List<StatStep> lisEquiDepth = new List<StatStep>();
+                List<StatStep> lisEquiWidth = new List<StatStep>();
+                List<StatStep> lisVOptimal = new List<StatStep>();
+                List<StatStep> lisQuantile = new List<StatStep>();
                 foreach (int v in colVal)
                 {
                     if (dictCol.ContainsKey(v))
@@ -229,9 +278,117 @@ namespace ConsoleApp1
                     sumTotal += dictCol[val];
                 }
 
-                Histogram h = CreateHistogramFromEquiWidth(colVal, lisEquiDepth, sumTotal);
+
+                //========================================
+                // Quantile implementation 
+                //========================================
+                List<ErrorListElem> eeQuantileIterator = new List<ErrorListElem>();
+
+                errorRateList.Clear();
+                // Also create the stat steps for the equi depth case.
+                //CreateVOptimalHistogram(colVal, lisEquiDepth, sumTotal);
+                CreateQuantileBasedHistogram(colVal, lisQuantile, sumTotal);
+                GetErrorList(rangeRows, colVal, errorRateList, eeQuantileIterator, lisQuantile);
+                // We have the erroRate list and now we will sort it
+                errorRateList.Sort();
+                errorRateList.ForEach(Console.WriteLine);
 
 
+                var csv = new StringBuilder();
+
+                int cnt1 = 0;
+                foreach (var v in eeQuantileIterator)
+                {
+                    var newLine = string.Format("{0},{1},{2},{3},{4},{5}", rangeRows[v.num].Item1, rangeRows[v.num].Item2, v.num, v.countAct, v.countStat, v.qE);
+                    csv.AppendLine(newLine);
+                    cnt1++;
+                }
+
+                string fileNameForFirstStatErrorRate = "QuantileBased.csv";
+                if (!Directory.Exists(FoldToCreateFiles))
+                {
+                    Directory.CreateDirectory(FoldToCreateFiles);
+                }
+
+                string Fullname = Path.Combine(FoldToCreateFiles, fileNameForFirstStatErrorRate);
+
+                //after your loop
+                File.WriteAllText(Fullname, csv.ToString());
+                errorRateList.Clear();
+
+
+
+                //========================================
+                // VOPtimal implementation 
+                //========================================
+                List<ErrorListElem> eeVOptimalIterator = new List<ErrorListElem>();
+
+                errorRateList.Clear();
+                // Also create the stat steps for the equi depth case.
+                //CreateVOptimalHistogram(colVal, lisEquiDepth, sumTotal);
+                CreateVOptimalHistogramJag(colVal, lisVOptimal, sumTotal);
+                GetErrorList(rangeRows, colVal, errorRateList, eeVOptimalIterator, lisVOptimal);
+                // We have the erroRate list and now we will sort it
+                errorRateList.Sort();
+                errorRateList.ForEach(Console.WriteLine);
+
+
+                 csv = new StringBuilder();
+
+                 foreach (var v in eeVOptimalIterator)
+                {
+                    var newLine = string.Format("{0},{1},{2},{3},{4},{5}", rangeRows[v.num].Item1, rangeRows[v.num].Item2, v.num, v.countAct, v.countStat, v.qE);
+                    csv.AppendLine(newLine);
+                    cnt1++;
+                }
+
+                 fileNameForFirstStatErrorRate = "VOptimalHistogramMain.csv";
+                if (!Directory.Exists(FoldToCreateFiles))
+                {
+                    Directory.CreateDirectory(FoldToCreateFiles);
+                }
+
+                 Fullname = Path.Combine(FoldToCreateFiles, fileNameForFirstStatErrorRate);
+
+                //after your loop
+                File.WriteAllText(Fullname, csv.ToString());
+                errorRateList.Clear();
+
+
+
+                //========================================
+                // Equi Depth implementation
+                List<ErrorListElem> eeDepthIterator = new List<ErrorListElem>();
+
+                errorRateList.Clear();
+                // Also create the stat steps for the equi depth case.
+                CreateHistogramFromEquiDepth(colVal, lisEquiDepth, sumTotal);
+                GetErrorList(rangeRows, colVal, errorRateList, eeDepthIterator, lisEquiDepth);
+                // We have the erroRate list and now we will sort it
+                errorRateList.Sort();
+                errorRateList.ForEach(Console.WriteLine);
+
+
+                csv = new StringBuilder();
+                cnt1 = 0;
+                foreach (var v in eeDepthIterator)
+                {
+                    var newLine = string.Format("{0},{1},{2},{3},{4},{5}", rangeRows[v.num].Item1, rangeRows[v.num].Item2, v.num, v.countAct, v.countStat, v.qE);
+                    csv.AppendLine(newLine);
+                    cnt1++;
+                }
+
+                fileNameForFirstStatErrorRate = "EquiDepthHistogramMain.csv";
+                if (!Directory.Exists(FoldToCreateFiles))
+                {
+                    Directory.CreateDirectory(FoldToCreateFiles);
+                }
+
+                Fullname = Path.Combine(FoldToCreateFiles, fileNameForFirstStatErrorRate);
+
+                //after your loop
+                File.WriteAllText(Fullname, csv.ToString());
+                errorRateList.Clear();
 
                 //using (SqlCommand command = new SqlCommand(sql, connection))
                 //{
@@ -249,34 +406,42 @@ namespace ConsoleApp1
                 //            ss.distint_range_rows = int.Parse(reader["distinct_range_rows"].ToString());
                 //            ss.average_range_rows = reader.Getdouble(5);
 
-                //            lisEquiDepth.Add(ss);
+                //            lisEquiWidth.Add(ss);
                 //        }
                 //    }
                 //}
 
+
+                // Equi Depth code
+                //=================
+                Histogram h = CreateHistogramFromEquiWidth(colVal, lisEquiWidth, sumTotal);
+
+
                 // We have range queries
-                GetErrorList(rangeRows, colVal, errorRateList, erroriterator, lisEquiDepth);
+                GetErrorList(rangeRows, colVal, errorRateList, erroriterator, lisEquiWidth);
 
                 // We have the erroRate list and now we will sort it
                 errorRateList.Sort();
                 errorRateList.ForEach(Console.WriteLine);
 
 
-                var csv = new StringBuilder();
+                csv = new StringBuilder();
 
+                cnt1 = 0;
                 foreach (var v in erroriterator)
                 {
-                    var newLine = string.Format("{0},{1},{2},{3}", v.num, v.countAct, v.countStat, v.qE);
+                    var newLine = string.Format("{0},{1},{2},{3},{4},{5}", rangeRows[v.num].Item1, rangeRows[v.num].Item2, v.num, v.countAct, v.countStat, v.qE);
                     csv.AppendLine(newLine);
+                    cnt1++;
                 }
 
-                string fileNameForFirstStatErrorRate = "EquiWidthHistogramMain.csv";
+                fileNameForFirstStatErrorRate = "EquiWidthHistogramMain.csv";
                 if (!Directory.Exists(FoldToCreateFiles))
                 {
                     Directory.CreateDirectory(FoldToCreateFiles);
                 }
 
-                string Fullname = Path.Combine(FoldToCreateFiles, fileNameForFirstStatErrorRate);
+                Fullname = Path.Combine(FoldToCreateFiles, fileNameForFirstStatErrorRate);
 
                 //after your loop
                 File.WriteAllText(Fullname, csv.ToString());
@@ -301,10 +466,12 @@ namespace ConsoleApp1
 
                 csv = new StringBuilder();
 
+                cnt1 = 0;
                 foreach (var v in eeForNewIterator)
                 {
-                    var newLine = string.Format("{0},{1},{2},{3}", v.num, v.countAct, v.countStat, v.qE);
+                    var newLine = string.Format("{0},{1},{2},{3},{4},{5}", rangeRows[v.num].Item1, rangeRows[v.num].Item2, v.num, v.countAct, v.countStat, v.qE);
                     csv.AppendLine(newLine);
+                    cnt1++;
                 }
                 string fileNameForFirstStatErrorRateNew = "HistogramSampleMain.csv";
                 string FullnameHist = Path.Combine(FoldToCreateFiles, fileNameForFirstStatErrorRateNew);
@@ -354,6 +521,417 @@ namespace ConsoleApp1
             }
 
             erroriterator.Sort();
+        }
+
+        /// <summary>
+        /// Will return the error sSE for a range
+        /// </summary>
+        /// <param name="colVal"></param>
+        /// <param name="start"></param>
+        /// <param name="end"></param>
+        /// <returns></returns>
+        static double CalculateErrorInRange(List<double> colVal, int start, int end)
+        {
+
+            if (start == end)
+            {
+                return 0;
+            }
+
+            // Since we will cache a lot of values, this will reduce one mroe caulcations
+            if (ErrorValues[start, end] != 0)
+            {
+                return ErrorValues[start, end];
+            }
+
+            int count = end - start + 1;
+
+            double sum = SumAll[end] - SumAll[start];
+
+            double mean = (double)sum / (double)count;
+
+            double errorsum = 0;
+            for (int i = start; i < end; i++)
+            {
+                errorsum += Math.Pow(colVal[i] - mean, 2);
+            }
+
+            ErrorValues[start, end] = errorsum;
+            return errorsum;
+        }
+
+        static double SqError(int start, int end, ref long[] SumFreq, ref long[] SumSquareFreq)
+        {
+            double s1 = SumFreq[end] - SumFreq[start];
+            double s2 = SumSquareFreq[end] - SumSquareFreq[start];
+
+            return (s2 - (s1 * s1) / (double)(end - start + 1));
+        }
+
+        /// <summary>
+        /// QUantile based will help divide, the numebr of rows into a quantile and if the number of elements iw within that uantile select that and allow it to be the used 
+        /// as the boucket boudnaries
+        /// </summary>
+        /// <param name="colVal"></param>
+        /// <param name="listS"></param>
+        /// <param name="sumTotal"></param>
+        static void CreateQuantileBasedHistogram(List<double> colVal, List<StatStep> listS, int sumTotal)
+        {
+            List<double> keyEl = new List<double>(dictCol.Keys);
+            int numberOfElements = colVal.Count / STEPS;
+
+            int prevEnd = -1;
+            for (int i = 0; i < STEPS; i++)
+            {
+                double val = colVal[numberOfElements * i];
+                StatStep ss = new StatStep();
+                ss.range_high_key = (int)val;
+                ss.equal_rows = dictCol[val];
+
+                int j = 0;
+                for (j = 0; j < keyEl.Count; j++)
+                {
+                    if (keyEl[j] == val)
+                    {
+                        break;
+                    }
+                }
+
+                if (prevEnd != -1)
+                {
+                    for (int k = prevEnd; k < j; k++)
+                    {
+                        ss.range_rows += dictCol[keyEl[k]];
+                        ss.distint_range_rows++;
+                    }
+                }
+                else
+                {
+                    for (int k = 0; k < j; k++)
+                    {
+                        ss.range_rows += dictCol[keyEl[k]];
+                        ss.distint_range_rows++;
+                    }
+                }
+
+                ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+
+                listS.Add(ss);
+
+                // if this is the last element, then ther eis nothing to be looked for more 
+                if (j == keyEl.Count)
+                    break;
+            }
+
+        }
+        /// <summary>
+        /// Implementaiton by Jagadeesh taken from
+        /// http://www.mathcs.emory.edu/~cheung/Courses/584/Syllabus/06-Histograms/Progs/Jagadish.java
+        /// The original author of v-optimal
+        /// </summary>
+        /// <param name="colVal"></param>
+        /// <param name="listS"></param>
+        /// <param name="sumTotal"></param>
+        static void CreateVOptimalHistogramJag(List<double> colVal, List<StatStep> listS, int sumTotal)
+        {
+            List<double> keyEl = new List<double>(dictCol.Keys);
+            double[,] VarianceArray = new double[STEPS, keyEl.Count];
+            int[,] xarray = new int[STEPS, keyEl.Count];
+            int[] minindex = new int[keyEl.Count];
+            long[] SumFreq = new long[keyEl.Count];
+            long[] sumSquare = new long[keyEl.Count];
+
+            for (int i = 0; i < keyEl.Count; i++)
+            {
+                SumFreq[i] = (i == 0) ? dictCol[keyEl[i]] : SumFreq[i - 1] + dictCol[keyEl[i]];
+                sumSquare[i] = (i == 0) ? dictCol[keyEl[i]] * dictCol[keyEl[i]] : (sumSquare[i - 1] + dictCol[keyEl[i]] * dictCol[keyEl[i]]);
+            }
+
+            for (int i = 0; i < STEPS; i++)
+            {
+                for (int j = 0; j < keyEl.Count; j++)
+                {
+                    if (i == 0)
+                    {
+                        VarianceArray[i, j] = SqError(i, j, ref SumFreq, ref sumSquare);
+                    }
+                    else if (j > i)
+                    {
+                        double vMin = Double.MaxValue;
+
+                        for (int k = 0; k < j; k++)
+                        {
+                            int start1 = 0;
+                            int end1 = k;
+                            int star2 = end1 + 1;
+                            int end2 = j;
+
+                            double v = VarianceArray[i - 1, k] + SqError(star2, end2, ref SumFreq, ref sumSquare);
+
+                            if (v < vMin)
+                            {
+                                vMin = v;
+                                xarray[i, j] = k;
+                                minindex[j] = star2;
+                                VarianceArray[i, j] = v;
+                            }
+
+                        }
+                    }
+                }
+            }
+
+            int end = 0, start = 0;
+            for (int i = 0; i < STEPS; i++)
+            {
+
+                if (i == 0)
+                {
+                    StatStep ss = new StatStep();
+                    end = keyEl.Count - 1;
+                    start = minindex[keyEl.Count - 1];
+                    ss.equal_rows = dictCol[keyEl[end]];
+                    ss.range_high_key = (int)keyEl[end];
+
+                    if (start == end)
+                    {
+                        //special case, where the entire range
+                        // had same value , which ideally should not happen
+                        int a = 10;
+                        continue;
+                    }
+
+                    for (int k = start; k < end; k++)
+                    {
+                        if (keyEl[k] == ss.range_high_key) break;
+                        ss.range_rows += dictCol[keyEl[k]];
+
+                        ss.distint_range_rows++;
+                    }
+
+                    ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                    listS.Add(ss);
+                }
+                else
+                {
+                    end = start - 1;
+                    while (start >= 0 && start == minindex[start])
+                    {
+                        start--;
+                    }
+
+                    if (start < 0)
+                    {
+                        break;
+                    }
+
+                    start = minindex[start];
+                    if (end == start)
+                    {
+                        start--;
+
+                    }
+
+                    StatStep ss = new StatStep();
+                    ss.equal_rows = dictCol[keyEl[end]];
+                    ss.range_high_key = (int)keyEl[end];
+
+                    if (start == end)
+                    {
+                        int a = 10;
+                    }
+
+                    for (int k = start; k < end; k++)
+                    {
+                        if (keyEl[k] == ss.range_high_key) break;
+                        ss.range_rows += dictCol[keyEl[k]];
+
+                        ss.distint_range_rows++;
+                    }
+
+
+                    if (ss.distint_range_rows == 0)
+                    {
+                        int a = 10;
+                    }
+                    ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                    listS.Insert(0, ss);
+
+                }
+            }
+
+        }
+
+
+        /// <summary>
+        /// Converted from the python solution
+        /// https://github.com/mikalcelay/V_Optimal_Histogram/blob/master/main.py
+        /// The code is simple and follows , frequency as the srouce parameter
+        /// the value as the sort parameter.
+        /// One more algorithm can be used, where the area will be used for optimization 
+        /// and not the frequency.
+        /// </summary>
+        /// <param name="colVal"></param>
+        /// <param name="listS"></param>
+        /// <param name="sumTotal"></param>
+        static void CreateVOptimalHistogram(List<double> colVal, List<StatStep> listS, int sumTotal)
+        {
+            double[,] VarianceArray = new double[STEPS, colVal.Count];
+            int[,] xarray = new int[STEPS, colVal.Count];
+            int[] minindex = new int[STEPS];
+
+            for (int i = 0; i < STEPS; i++)
+            {
+                for (int j = 0; j < colVal.Count; j++)
+                {
+
+
+                    if (i == 0)
+                    {
+                        VarianceArray[i, j] = CalculateErrorInRange(colVal, i, j);
+                    }
+                    else if (j > i)
+                    {
+                        double vMin = Double.MaxValue;
+
+                        for (int k = 1; k < j; k++)
+                        {
+                            int start1 = 0;
+                            int end1 = k;
+                            int star2 = end1 + 1;
+                            int end2 = j;
+
+                            double v = VarianceArray[i - 1, k] + CalculateErrorInRange(colVal, star2, end2);
+
+                            if (v < vMin)
+                            {
+                                vMin = v;
+                                xarray[i, j] = k;
+                                minindex[i] = k;
+                            }
+                            VarianceArray[i, j] = vMin;
+                        }
+                    }
+                }
+            }
+
+
+            for (int i = 0; i < STEPS; i++)
+            {
+                int end = 0, start = 0;
+                if (i == 0)
+                {
+                    StatStep ss = new StatStep();
+                    end = colVal.Count - 1;
+                    start = xarray[STEPS - 1, colVal.Count - 1] + 1;
+                    ss.equal_rows = dictCol[colVal[colVal.Count - 1]];
+                    ss.range_high_key = (int)colVal[colVal.Count - 1];
+
+                    while (start < end && colVal[start] == colVal[start + 1])
+                    {
+                        start++;
+                    }
+
+                    if (start == end)
+                    {
+                        //special case, where the entire range
+                        // had same value , which ideally should not happen
+                        int a = 10;
+                        continue;
+                    }
+
+                    double prev = -1;
+                    for (int k = start; k < end; k++)
+                    {
+                        if (colVal[k] == ss.range_high_key) break;
+                        ss.range_rows++;
+
+                        if (prev != colVal[k])
+                        {
+                            ss.distint_range_rows++;
+                        }
+
+                        prev = colVal[k];
+                    }
+
+                    ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                    listS.Add(ss);
+                }
+                else
+                {
+                    end = start - 1;
+                    start = xarray[STEPS - 1 - i, end] + 1;
+
+                    StatStep ss = new StatStep();
+                    ss.equal_rows = dictCol[colVal[end]];
+                    ss.range_high_key = (int)colVal[end];
+
+                    while (start < end && colVal[start] == colVal[start + 1])
+                    {
+                        start++;
+                    }
+
+                    if (start == end)
+                    {
+                        int a = 10;
+                    }
+                    double prev = -1;
+                    for (int k = start; k < end; k++)
+                    {
+                        if (colVal[k] == ss.range_high_key) break;
+                        ss.range_rows++;
+
+                        if (prev != colVal[k])
+                        {
+                            ss.distint_range_rows++;
+                        }
+
+                        prev = colVal[k];
+                    }
+
+                    ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                    listS.Insert(0, ss);
+
+                }
+            }
+
+
+        }
+
+        // This one fgollows the simple principle of divigding
+        // the total number of elements and then dividing the same with the number of steps
+        // then do a simple iterative process to achieved the singular array of equidepth buckets
+        static void CreateHistogramFromEquiDepth(List<double> colVal, List<StatStep> listS, int sumTotal)
+        {
+            int countInEach = sumTotal / STEPS;
+            List<double> keyEl = new List<double>(dictCol.Keys);
+            keyEl.Sort();
+
+            for (int i = 0; i < keyEl.Count; i++)
+            {
+                int sum = 0;
+                int pre = 0;
+                int count = 0;
+                for (; i < keyEl.Count; i++)
+                {
+                    count++;
+
+                    sum += dictCol[keyEl[i]];
+                    if (sum >= countInEach)
+                    {
+                        StatStep ss = new StatStep();
+                        ss.equal_rows = dictCol[keyEl[i]];
+                        ss.range_high_key = (int)keyEl[i];
+                        ss.distint_range_rows = count - 1;
+                        ss.range_rows = pre;
+                        ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                        listS.Add(ss);
+                        break;
+                    }
+
+                    pre = sum;
+                }
+            }
         }
 
         // Have some random numbers, based on a distribution
@@ -736,6 +1314,8 @@ namespace ConsoleApp1
             }
 
             int heapCount = 0;
+            int listLimit = 2 * (heElemList.Count / STEPS + 1);
+            bool stillLeft = false;
             // At this point the heap is ready. Now pop and keep merging till the end.
             while (heElemList.Count > STEPS)
             {
@@ -743,6 +1323,19 @@ namespace ConsoleApp1
 
                 HeapElem he = heapForWork.Dequeue().Key;
 
+                while (he != null && heapForWork.Count > 0 &&
+                    he.mergeerrorList.Count >= listLimit)
+                {
+                    //heElemList.Remove(he);
+                    he = heapForWork.Dequeue().Key;
+                }
+
+
+                if (he == null)
+                {
+                    stillLeft = true;
+                    break;
+                }
                 // We got the he elem, now the hard work of the merged one to be inserted.
 
                 HeapElem heNew = new HeapElem();
@@ -791,12 +1384,12 @@ namespace ConsoleApp1
                     //    int a = 10;
                     //}
 
-                    if (k+1 < heElemList.Count &&
+                    if (k + 1 < heElemList.Count &&
                         heapForWork.Contains(new KeyValuePair<HeapElem, Tuple<double, double>>(heElemList[k], new Tuple<double, double>(heElemList[k].mergeslope, heElemList[k].mergeintercept))))
                     {
                         heapForWork.Remove(new KeyValuePair<HeapElem, Tuple<double, double>>(heElemList[k], new Tuple<double, double>(heElemList[k].mergeslope, heElemList[k].mergeintercept)));
                     }
-                    else if (k+1 < heElemList.Count)
+                    else if (k + 1 < heElemList.Count)
                     {
                         int a = 10;
                     }
@@ -828,8 +1421,8 @@ namespace ConsoleApp1
 
                 if (k > 1)
                 {
-                    var into1 = new KeyValuePair<HeapElem, Tuple<double, double>>(heElemList[k-2], new Tuple<double, double>(heElemList[k-2].mergeslope, heElemList[k-2].mergeintercept));
-                    if(heapForWork.Contains(into1))
+                    var into1 = new KeyValuePair<HeapElem, Tuple<double, double>>(heElemList[k - 2], new Tuple<double, double>(heElemList[k - 2].mergeslope, heElemList[k - 2].mergeintercept));
+                    if (heapForWork.Contains(into1))
                     {
                         heapForWork.Remove(into1);
                     }
@@ -839,11 +1432,34 @@ namespace ConsoleApp1
                     }
 
                     MergeTwoHeapElem(heElemList[k - 2], heElemList[k - 1]);
- 
+
                     // Once we have modified te k-1 element, that means, that the k-2 guy should have updated merge values. 
                     // For the algorithm to keep getting the reai and latest values, this is needed.
-                    heapForWork.Enqueue(heElemList[k-2], new Tuple<double, double>(heElemList[k-2].mergeslope, heElemList[k-2].mergeintercept));
+                    heapForWork.Enqueue(heElemList[k - 2], new Tuple<double, double>(heElemList[k - 2].mergeslope, heElemList[k - 2].mergeintercept));
                     // So both the sides are merged and we can have them in the heap inserted back again.
+                }
+
+                //while (heElemList.Count > STEPS)
+                //{
+                //    for (int i = 0; i < heElemList.Count-1; i++)
+                //    {
+
+                //    }
+                //}
+
+                if (true)
+                {
+
+                    for (int i = 0; i < heElemList.Count - 1; i++)
+                    {
+                        if (heElemList[i].mergeerrorList == null ||
+                            heElemList[i].mergeerrorList.Count == 0 ||
+                            heElemList[i].mergeerrorList.Count > 20)
+                        {
+                            int a = 10;
+                        }
+
+                    }
                 }
             }
 
@@ -1009,7 +1625,7 @@ namespace ConsoleApp1
             int totCount = 0;
             double prevHi = Int32.MinValue;
 
-            if (high == lisS[0].range_high_key)
+            if (low == high && high == lisS[0].range_high_key)
             {
                 totCount = (int)lisS[0].equal_rows;
                 return totCount;
@@ -1017,36 +1633,80 @@ namespace ConsoleApp1
 
             if (high < lisS[0].range_high_key)
             {
-                return 0;
+                double frac = (double)(high - low) / lisS[0].range_high_key;
+                double numDis = frac * lisS[0].distint_range_rows;
+                double tot = numDis * lisS[0].average_range_rows;
+                return totCount + (int)tot;
+
             }
 
             for (int i = 0; i < lisS.Count(); i++)
             {
                 // First is for the rnage that is below the contained value. 
-                if (i == 0 && low < lisS[0].range_high_key)
+                if (i == 0 && low < lisS[0].range_high_key && high < lisS[0].range_high_key)
                 {
-                    totCount += (int)lisS[0].equal_rows;
+                    double frac = (double)(low - 0) / (double)(lisS[0].range_high_key - 0);
+                    double numDis = frac * lisS[0].distint_range_rows;
+
+                    totCount += (int)(numDis * (int)lisS[0].average_range_rows);
+                    return totCount;
 
                 }
-                else if (low < prevHi && high < lisS[i].range_high_key)
+                else if (i == 0 && low < lisS[0].range_high_key && high == lisS[0].range_high_key)
                 {
-                    double frac = (high - prevHi) / (lisS[i].range_high_key - prevHi);
+                    double frac = (double)(low - 0) / (double)(lisS[0].range_high_key - 0);
+                    double numDis = frac * lisS[0].distint_range_rows;
+
+                    totCount += (int)(numDis * (int)lisS[0].average_range_rows);
+                    totCount += lisS[0].equal_rows;
+                    return totCount;
+                }
+                else if (i == 0 && low < lisS[0].range_high_key && high > lisS[0].range_high_key)
+                {
+                    double frac = (double)(low - 0) / (double)(lisS[0].range_high_key - 0);
+                    double numDis = frac * lisS[0].distint_range_rows;
+
+                    totCount += (int)(numDis * (int)lisS[0].average_range_rows);
+                    totCount += lisS[0].equal_rows;
+                    continue;
+                }
+                else if (low <= prevHi && high < lisS[i].range_high_key)
+                {
+                    double frac = (double)(high - prevHi) / (double)(lisS[i].range_high_key - prevHi);
                     double numDis = frac * lisS[i].distint_range_rows;
                     double tot = numDis * lisS[i].average_range_rows;
                     return totCount + (int)tot;
 
                 }
-                else if (low < prevHi && high > lisS[i].range_high_key)
+                else if (low <= prevHi && high > lisS[i].range_high_key)
                 {
                     totCount += (int)lisS[i].range_rows + (int)lisS[i].equal_rows;
                 }
-                else if (low > prevHi && high < lisS[i].range_high_key)
+                else if (i != 0 && low > prevHi && high <= lisS[i].range_high_key)
                 {
                     double frac = (high - low) / (lisS[i].range_high_key - prevHi);
                     double numDis = frac * lisS[i].distint_range_rows;
                     double tot = numDis * lisS[i].average_range_rows;
+                    tot += (high == lisS[i].range_high_key) ? lisS[i].equal_rows : 0;
                     return totCount + (int)tot;
                 }
+                else if (i != 0 && low > prevHi && low < lisS[i].range_high_key &&
+                    high > lisS[i].range_high_key)
+                {
+                    double frac = (lisS[i].range_high_key - low) / (lisS[i].range_high_key - prevHi);
+                    double numDis = frac * lisS[i].distint_range_rows;
+                    double tot = numDis * lisS[i].average_range_rows;
+                    totCount += (int)tot + lisS[i].equal_rows;
+                }
+                else if (low > lisS[i].range_high_key && high > lisS[i].range_high_key)
+                {
+                    // do nothing, keeping it for all possible combination case
+                }
+                else if (low == lisS[i].range_high_key)
+                {
+                    totCount += lisS[i].equal_rows;
+                }
+
                 prevHi = lisS[i].range_high_key;
 
             }

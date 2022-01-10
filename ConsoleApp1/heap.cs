@@ -19,6 +19,26 @@ namespace ConsoleApp1
             //  Custom function with slope and intercept data. 
             // We checked with the following data.
 
+            if ((double)y.GetMergeNorm() > (double)x.GetMergeNorm())
+            {
+                return -1;
+            }
+            else if ((double)y.GetMergeNorm() < (double)x.GetMergeNorm())
+            {
+                return 1;
+            }
+
+            return 0;
+        }
+
+        public int Compare2(Program.HeapElem x, Program.HeapElem y)
+        {
+            // "inverted" comparison
+            // direct comparison of integers should return x - y
+
+            //  Custom function with slope and intercept data. 
+            // We checked with the following data.
+
             double yNorm = y.GetMergeNorm();
             double xNorm = x.GetMergeNorm();
             double xInterceptNorm = x.GetMergeInterceptNorm();
@@ -36,7 +56,7 @@ namespace ConsoleApp1
                         return 1;
                 }
             }
-            else if (yNorm < xNorm )
+            else if (yNorm < xNorm)
             {
                 if (yInterceptNorm < xInterceptNorm)
                 {
@@ -44,7 +64,7 @@ namespace ConsoleApp1
                 }
                 else
                 {
-                    if (yInterceptNorm/xInterceptNorm > xNorm/yNorm)
+                    if (yInterceptNorm / xInterceptNorm > xNorm / yNorm)
                     {
                         return -1;
                     }
@@ -59,7 +79,7 @@ namespace ConsoleApp1
         }
     }
 
-
+    
     class Heap
     {
 
