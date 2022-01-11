@@ -261,11 +261,11 @@ namespace ConsoleApp1
                 // For each type of the num ( EMQ, DCT, RGE 
                 // run test ) and find out the error range, the
                 // csv files generated will be under a different folder each time
-               
 
-                    RunTestForTypeTest( colVal, FoldToCreateFiles, rangeRows);
 
-       
+                RunTestForTypeTest(colVal, FoldToCreateFiles, rangeRows);
+
+
 
             }
             catch (SqlException e)
@@ -286,6 +286,7 @@ namespace ConsoleApp1
         /// <param name="colVal"></param>
         static void RunTestForTypeTest(List<double> colVal, string FoldToCreateFiles, List<Tuple<int, int>> rangeRows)
         {
+            List<double> ActualEMQErrorRateList = new List<double>();
             List<double> EMQErrorRateList = new List<double>();
             List<double> RGEErrorRateList = new List<double>();
             List<double> DCTErrorRateList = new List<double>();
@@ -344,14 +345,16 @@ namespace ConsoleApp1
                 //========================================
                 // Quantile implementation 
                 //========================================
+                List<ErrorListElem> AEMQeeQuantileIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EMQeeQuantileIterator = new List<ErrorListElem>();
                 List<ErrorListElem> RGEeeQuantileIterator = new List<ErrorListElem>();
                 List<ErrorListElem> DCTeeQuantileIterator = new List<ErrorListElem>();
 
-                EMQErrorRateList.Clear(); 
-                RGEeeQuantileIterator.Clear(); 
-                DCTeeQuantileIterator.Clear();
-
+                ActualEMQErrorRateList.Clear();
+                EMQErrorRateList.Clear();
+                RGEErrorRateList.Clear();
+                DCTErrorRateList.Clear();
+                
 
 
                 // Also create the stat steps for the equi depth case.
@@ -361,6 +364,7 @@ namespace ConsoleApp1
 
                 // Once the algorithm has created the histogram, it is now time
                 // to find all the errors that came out of it.
+                GetAEMQErrorList(rangeRows, colVal, ActualEMQErrorRateList, AEMQeeQuantileIterator, lisQuantile);
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, EMQeeQuantileIterator, lisQuantile);
                 GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, RGEeeQuantileIterator, lisQuantile);
                 GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, DCTeeQuantileIterator, lisQuantile);
@@ -368,10 +372,12 @@ namespace ConsoleApp1
 
                 FillFiles(FoldToCreateFiles,
                     rangeRows,
-                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, "QuantileBased.csv",
+                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList,
+                    "QuantileBased.csv",
                     EMQeeQuantileIterator,
                     RGEeeQuantileIterator,
-                    DCTeeQuantileIterator);
+                    DCTeeQuantileIterator,
+                    AEMQeeQuantileIterator);
             }
 
 
@@ -380,10 +386,12 @@ namespace ConsoleApp1
                 //========================================
                 // VOPtimal implementation 
                 //========================================
+                List<ErrorListElem> AEMQeeVOptimalIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EMQeeVOptimalIterator = new List<ErrorListElem>();
                 List<ErrorListElem> RGEeeVOptimalIterator = new List<ErrorListElem>();
                 List<ErrorListElem> DCTeeVOptimalIterator = new List<ErrorListElem>();
 
+                ActualEMQErrorRateList.Clear();
                 EMQErrorRateList.Clear();
                 RGEErrorRateList.Clear();
                 DCTErrorRateList.Clear();
@@ -409,7 +417,7 @@ namespace ConsoleApp1
 
                 FillFiles(FoldToCreateFiles,
                     rangeRows,
-                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, 
+                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList,
                     "VOptimalHistogram.csv",
                     EMQeeVOptimalIterator,
                     EMQeeVOptimalIterator,
@@ -425,7 +433,7 @@ namespace ConsoleApp1
                 List<ErrorListElem> EquiDEMQeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EquiDRGEeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EquiDDCTeeDepthIterator = new List<ErrorListElem>();
-
+                ActualEMQErrorRateList.Clear();
                 EMQErrorRateList.Clear();
                 RGEErrorRateList.Clear();
                 DCTErrorRateList.Clear();
@@ -483,6 +491,7 @@ namespace ConsoleApp1
                 List<ErrorListElem> EquiWRGEeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EquiWDCTeeDepthIterator = new List<ErrorListElem>();
 
+                ActualEMQErrorRateList.Clear();
                 EMQErrorRateList.Clear();
                 RGEErrorRateList.Clear();
                 DCTErrorRateList.Clear();
@@ -534,7 +543,7 @@ namespace ConsoleApp1
                 // We are working on the follow
                 //  we have te new histogram. We will now need to do the same estimation things
 
-                
+
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, AlgoEMQeeDepthIterator, histLs);
                 GetEMQErrorList(rangeRows, colVal, RGEErrorRateList, AlgoRGEeeDepthIterator, histLs);
                 GetEMQErrorList(rangeRows, colVal, DCTErrorRateList, AlgoDCTeeDepthIterator, histLs);
@@ -598,12 +607,14 @@ namespace ConsoleApp1
         static void FillFiles(
             string FoldToCreateFiles,
             List<Tuple<int, int>> rangeRows,
-            List<double> EMQErrorRateList, List<double> RGEErrorRateList, List<double> DCTErrorRateList,
-            string fileNameForFirstStatErrorRate, 
+            List<double> EMQErrorRateList, List<double> RGEErrorRateList,
+            List<double> DCTErrorRateList, List<double> AEMQrrorRateList,
+            string fileNameForFirstStatErrorRate,
 
             List<ErrorListElem> EMQeeQuantileIterator,
             List<ErrorListElem> RGEeeQuantileIterator,
-            List<ErrorListElem> DCTeeQuantileIterator)
+            List<ErrorListElem> DCTeeQuantileIterator,
+            List<ErrorListElem> AEMQeeQuantileIterator)
         {
             string EMQFullname;
             string RGEFullname;
@@ -613,7 +624,7 @@ namespace ConsoleApp1
             // We have the erroRate list and now we will sort it
             EMQErrorRateList.Sort();
             EMQErrorRateList.ForEach(Console.WriteLine);
-
+            AEMQrrorRateList.Sort();
             RGEErrorRateList.Sort();
             DCTErrorRateList.Sort();
 
@@ -670,30 +681,107 @@ namespace ConsoleApp1
 
             //after your loop
             File.WriteAllText(DCTFullname, csv.ToString());
-            DCTErrorRateList.Clear();
+            DCTeeQuantileIterator.Clear();
+
+
+            csv = new StringBuilder();
+            cnt1 = 0;
+            foreach (var v in AEMQeeQuantileIterator)
+            {
+                var newLine = string.Format("{0},{1},{2},{3},{4},{5}", rangeRows[v.num].Item1, rangeRows[v.num].Item2, v.num, v.countAct, v.countStat, v.qE);
+                csv.AppendLine(newLine);
+                cnt1++;
+            }
+
+            DCTFullname = Path.Combine(FoldToCreateFiles, "AEMQ", fileNameForFirstStatErrorRate);
+
+            //after your loop
+            File.WriteAllText(DCTFullname, csv.ToString());
+            AEMQeeQuantileIterator.Clear();
+
         }
 
-
-
         /// <summary>
-        /// Range Range Errors
+        /// Actual keys within the table
         /// </summary>
         /// <param name="rangeRows"></param>
         /// <param name="colVal"></param>
         /// <param name="errorRateList"></param>
         /// <param name="erroriterator"></param>
         /// <param name="lisS"></param>
-        static void GetEMQErrorList(List<Tuple<int, int>> rangeRows, List<double> colVal, List<double> errorRateList, List<ErrorListElem> erroriterator, List<StatStep> lisS)
+        static void GetAEMQErrorList(List<Tuple<int, int>> rangeRows, List<double> colVal, List<double> errorRateList, List<ErrorListElem> erroriterator, List<StatStep> lisS)
         {
             int num = 0;
-            foreach (var tup in rangeRows)
+            List<double> keyEl = new List<double>(dictCol.Keys);
+
+
+            foreach (var tup in keyEl)
             {
                 // we need to query how many values are there. 
-                var count = dictCol[tup.Item1];
+                int count = 0;
+
+                if (dictCol.ContainsKey(tup))
+                {
+                    count = dictCol[tup];
+                }
+                else
+                {
+                    count = 0;
+                }
 
                 // Now we have the actual count, 
                 //next we need the count from stat
-                var countFromStat = CalculateEMQValuesFromHistogram(tup.Item1, tup.Item2, lisS);
+                var countFromStat = CalculateEMQValuesFromHistogram(tup, lisS);
+
+                double errorRate = ((double)(countFromStat + 1)) / (double)(count + 1);
+
+                if (errorRate < 1 && errorRate > 0)
+                {
+                    errorRate = 1 / errorRate;
+                }
+                errorRateList.Add(errorRate);
+                ErrorListElem ee = new ErrorListElem();
+                ee.countAct = count;
+                ee.countStat = countFromStat;
+                ee.qE = errorRate;
+                ee.num = num++;
+                erroriterator.Add(ee);
+            }
+
+            erroriterator.Sort();
+        }
+
+            /// <summary>
+            /// Range Range Errors
+            /// </summary>
+            /// <param name="rangeRows"></param>
+            /// <param name="colVal"></param>
+            /// <param name="errorRateList"></param>
+            /// <param name="erroriterator"></param>
+            /// <param name="lisS"></param>
+            static void GetEMQErrorList(List<Tuple<int, int>> rangeRows, List<double> colVal, List<double> errorRateList, List<ErrorListElem> erroriterator, List<StatStep> lisS)
+        {
+            int num = 0;
+            List<double> keyEl = new List<double>(dictCol.Keys);
+
+
+            foreach (var tup in rangeRows)
+            {
+                // we need to query how many values are there. 
+                int count = 0;
+
+                if (dictCol.ContainsKey(tup.Item1))
+                {
+                    count = dictCol[tup.Item1];
+                }
+                else
+                {
+                    count = 0;
+                }
+
+                // Now we have the actual count, 
+                //next we need the count from stat
+                var countFromStat = CalculateEMQValuesFromHistogram(tup.Item1, lisS);
 
                 double errorRate = ((double)(countFromStat + 1)) / (double)(count + 1);
 
@@ -724,7 +812,7 @@ namespace ConsoleApp1
 
                 // Now we have the actual count, 
                 //next we need the count from stat
-                var countFromStat = CalculateRGEValuesFromHistogram(tup.Item1, tup.Item2, lisS);
+                var countFromStat = CalculateDCTValuesFromHistogram(tup.Item1, tup.Item2, lisS);
 
                 double errorRate = ((double)(countFromStat + 1)) / (double)(count + 1);
 
@@ -1823,7 +1911,14 @@ namespace ConsoleApp1
         }
 
 
-
+        /// <summary>
+        ///  THis is different that the caulcation from histogram. 
+        ///  THis is done on the temporary elemebts and not the
+        ///  major histogram
+        /// </summary>
+        /// <param name="his"></param>
+        /// <param name="val"></param>
+        /// <returns></returns>
         static double CalculateEMQEsitmateFromHist(ref List<HeapStatElem> his, double val)
         {
             double prevHi = Int32.MinValue;
@@ -1842,7 +1937,15 @@ namespace ConsoleApp1
             }
             return 0;
         }
-        static int CalculateEMQValuesFromHistogram(int low, int high, List<StatStep> lisS)
+
+
+        /// <summary>
+        /// The EMQ queries will be only for low.
+        /// </summary>
+        /// <param name="low"></param>
+        /// <param name="lisS"></param>
+        /// <returns></returns>
+        static int CalculateEMQValuesFromHistogram(double low, List<StatStep> lisS)
         {
             int num = 0;
             while (num < lisS.Count() && (int)lisS[num].range_high_key < low)
@@ -1875,7 +1978,7 @@ namespace ConsoleApp1
 
             if (low == high && high == lisS[0].range_high_key)
             {
-                
+
                 return 1;
             }
 
@@ -1919,13 +2022,13 @@ namespace ConsoleApp1
                 {
                     double frac = (double)(high - prevHi) / (double)(lisS[i].range_high_key - prevHi);
                     double numDis = frac * lisS[i].distint_range_rows;
-                    
+
                     return totCount + (int)numDis;
 
                 }
                 else if (low <= prevHi && high > lisS[i].range_high_key)
                 {
-                    totCount += (int)lisS[i].distint_range_rows +1;
+                    totCount += (int)lisS[i].distint_range_rows + 1;
                 }
                 else if (i != 0 && low > prevHi && high <= lisS[i].range_high_key)
                 {
