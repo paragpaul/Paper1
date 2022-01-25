@@ -36,7 +36,7 @@ namespace ConsoleApp1
         public static double[] SumAll = new double[SAMPLECOUNT];
         public static double[,] ErrorValues = new double[SAMPLECOUNT, SAMPLECOUNT];
         public static bool fQuantile = true, fVOptimal = true, fEquiD = true, fEquiW = true, fAlgo = true;
-
+        public static TimeSpan tsQuantile, tsVOptimal, tsEquiD, tsEquiW, tsAlgo;
 
         // The heap tuple will have 2 of these and their spreads
         public class HeapElem : IComparable
@@ -162,7 +162,7 @@ namespace ConsoleApp1
 
         public enum TYPETEST
         {
-            EMQ, RGE, DCT
+            EMQ, RGE, DCT, AEMQ
         }
 
         public readonly Random _random = new Random();
@@ -264,7 +264,7 @@ namespace ConsoleApp1
 
 
                 RunTestForTypeTest(colVal, FoldToCreateFiles, rangeRows);
-
+                FillTimeSeriesDataForTests(FoldToCreateFiles);
 
 
             }
@@ -277,6 +277,14 @@ namespace ConsoleApp1
             Console.ReadKey(true);
         }
 
+        /// <summary>
+        /// Print all the times, that will help
+        /// 
+        /// </summary>
+        /// <param name="FoldToCreateFiles"></param>
+
+        static void FillTimeSeriesDataForTests(string FoldToCreateFiles)
+        { }
         /// <summary>
         /// This will help reduce the number of lines in the main
         /// function , as it was taking prohibitivley wrong to add
@@ -354,13 +362,14 @@ namespace ConsoleApp1
                 EMQErrorRateList.Clear();
                 RGEErrorRateList.Clear();
                 DCTErrorRateList.Clear();
-                
 
 
+                DateTime start = DateTime.Now;
                 // Also create the stat steps for the equi depth case.
                 //CreateVOptimalHistogram(colVal, lisEquiDepth, sumTotal);
                 CreateQuantileBasedHistogram(colVal, lisQuantile, sumTotal);
-
+                DateTime end = DateTime.Now;
+                tsQuantile = end - start;
 
                 // Once the algorithm has created the histogram, it is now time
                 // to find all the errors that came out of it.
@@ -399,15 +408,23 @@ namespace ConsoleApp1
                 EMQeeVOptimalIterator.Clear();
                 RGEeeVOptimalIterator.Clear();
                 DCTeeVOptimalIterator.Clear();
+                AEMQeeVOptimalIterator.Clear();
 
+
+                DateTime start = DateTime.Now;
+                
                 // Also create the stat steps for the equi depth case.
                 //CreateVOptimalHistogram(colVal, lisEquiDepth, sumTotal);
                 CreateVOptimalHistogramJag(colVal, lisVOptimal, sumTotal);
+                DateTime end = DateTime.Now;
+                tsVOptimal = end - start;
 
 
+
+                GetEMQErrorList(rangeRows, colVal, ActualEMQErrorRateList, AEMQeeVOptimalIterator, lisVOptimal);
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, EMQeeVOptimalIterator, lisVOptimal);
-                GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, EMQeeVOptimalIterator, lisVOptimal);
-                GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, EMQeeVOptimalIterator, lisVOptimal);
+                GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, RGEeeVOptimalIterator, lisVOptimal);
+                GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, DCTeeVOptimalIterator, lisVOptimal);
 
                 // We have the erroRate list and now we will sort it
                 EMQErrorRateList.Sort();
@@ -417,31 +434,40 @@ namespace ConsoleApp1
 
                 FillFiles(FoldToCreateFiles,
                     rangeRows,
-                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList,
+                    EMQErrorRateList, RGEErrorRateList, 
+                    DCTErrorRateList, ActualEMQErrorRateList,
                     "VOptimalHistogram.csv",
                     EMQeeVOptimalIterator,
-                    EMQeeVOptimalIterator,
-                    EMQeeVOptimalIterator);
+                    RGEeeVOptimalIterator,
+                    DCTeeVOptimalIterator,
+                    AEMQeeVOptimalIterator);
 
             }
 
             if (fEquiD)
             {
-
                 //========================================
                 // Equi Depth implementation
+                //===========================================
+                List<ErrorListElem> EquiDAEMQeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EquiDEMQeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EquiDRGEeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EquiDDCTeeDepthIterator = new List<ErrorListElem>();
+
+
                 ActualEMQErrorRateList.Clear();
                 EMQErrorRateList.Clear();
                 RGEErrorRateList.Clear();
                 DCTErrorRateList.Clear();
 
+
+                DateTime start = DateTime.Now;
                 // Also create the stat steps for the equi depth case.
                 CreateHistogramFromEquiDepth(colVal, lisEquiDepth, sumTotal);
+                DateTime end = DateTime.Now;
+                tsEquiD = end - start;
 
-
+                GetAEMQErrorList(rangeRows, colVal, ActualEMQErrorRateList, EquiDAEMQeeDepthIterator, lisEquiDepth);
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, EquiDEMQeeDepthIterator, lisEquiDepth);
                 GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, EquiDRGEeeDepthIterator, lisEquiDepth);
                 GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, EquiDDCTeeDepthIterator, lisEquiDepth);
@@ -456,11 +482,12 @@ namespace ConsoleApp1
 
                 FillFiles(FoldToCreateFiles,
                     rangeRows,
-                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList,
+                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList,
                     "EquiDepthHistogram.csv",
                     EquiDEMQeeDepthIterator,
                     EquiDRGEeeDepthIterator,
-                    EquiDDCTeeDepthIterator);
+                    EquiDDCTeeDepthIterator,
+                    EquiDAEMQeeDepthIterator);
 
                 //using (SqlCommand command = new SqlCommand(sql, connection))
                 //{
@@ -487,6 +514,7 @@ namespace ConsoleApp1
 
             if (fEquiW)
             {
+                List<ErrorListElem> EquiWAEMQeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EquiWEMQeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EquiWRGEeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> EquiWDCTeeDepthIterator = new List<ErrorListElem>();
@@ -499,13 +527,18 @@ namespace ConsoleApp1
                 //==========================
                 // Equi Width code
                 //=================
+                DateTime start = DateTime.Now;
+
                 Histogram h = CreateHistogramFromEquiWidth(colVal, lisEquiWidth, sumTotal);
+                DateTime end = DateTime.Now;
+                tsEquiW = end - start;
 
 
                 // We have range queries
+                GetAEMQErrorList(rangeRows, colVal, ActualEMQErrorRateList, EquiWAEMQeeDepthIterator, lisEquiWidth);
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, EquiWEMQeeDepthIterator, lisEquiWidth);
-                GetEMQErrorList(rangeRows, colVal, RGEErrorRateList, EquiWEMQeeDepthIterator, lisEquiWidth);
-                GetEMQErrorList(rangeRows, colVal, DCTErrorRateList, EquiWEMQeeDepthIterator, lisEquiWidth);
+                GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, EquiWRGEeeDepthIterator, lisEquiWidth);
+                GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, EquiWDCTeeDepthIterator, lisEquiWidth);
 
                 // We have the erroRate list and now we will sort it
                 EMQErrorRateList.Sort();
@@ -516,45 +549,55 @@ namespace ConsoleApp1
 
                 FillFiles(FoldToCreateFiles,
                          rangeRows,
-                         EMQErrorRateList, RGEErrorRateList, DCTErrorRateList,
-                         "EquiDepthHistogram.csv",
+                         EMQErrorRateList, RGEErrorRateList,
+                         DCTErrorRateList, ActualEMQErrorRateList,
+                         "EquiWidthHistogram.csv",
                          EquiWEMQeeDepthIterator,
-                         EquiWEMQeeDepthIterator,
-                         EquiWEMQeeDepthIterator);
+                         EquiWRGEeeDepthIterator,
+                         EquiWDCTeeDepthIterator,
+                         EquiWAEMQeeDepthIterator);
 
             }
 
             if (fAlgo)
             {
 
+                List<ErrorListElem> AlgoAEMQeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> AlgoEMQeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> AlgoRGEeeDepthIterator = new List<ErrorListElem>();
                 List<ErrorListElem> AlgoDCTeeDepthIterator = new List<ErrorListElem>();
 
+                ActualEMQErrorRateList.Clear();
                 EMQErrorRateList.Clear();
                 RGEErrorRateList.Clear();
                 DCTErrorRateList.Clear();
 
-
+                DateTime start = DateTime.Now;
                 // This is the portion where the actual magic happens 
                 // from within the algorithm
                 List<StatStep> histLs = new List<StatStep>();
                 CreateHistogramFromAlgorithm(colVal, histLs, 2);
                 // We are working on the follow
                 //  we have te new histogram. We will now need to do the same estimation things
+                DateTime end = DateTime.Now;
+                tsAlgo = end - start;
 
 
+                GetAEMQErrorList(rangeRows, colVal, ActualEMQErrorRateList, AlgoAEMQeeDepthIterator, histLs);
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, AlgoEMQeeDepthIterator, histLs);
-                GetEMQErrorList(rangeRows, colVal, RGEErrorRateList, AlgoRGEeeDepthIterator, histLs);
-                GetEMQErrorList(rangeRows, colVal, DCTErrorRateList, AlgoDCTeeDepthIterator, histLs);
+                GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, AlgoRGEeeDepthIterator, histLs);
+                GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, AlgoDCTeeDepthIterator, histLs);
 
                 FillFiles(FoldToCreateFiles,
                       rangeRows,
-                      EMQErrorRateList, RGEErrorRateList, DCTErrorRateList,
+                      EMQErrorRateList, RGEErrorRateList, 
+                      DCTErrorRateList, ActualEMQErrorRateList,
                       "AlgorithmHistogram.csv",
                       AlgoEMQeeDepthIterator,
                       AlgoRGEeeDepthIterator,
-                      AlgoDCTeeDepthIterator);
+                      AlgoDCTeeDepthIterator,
+                      AlgoAEMQeeDepthIterator
+                      );
 
             }
         }
@@ -619,6 +662,7 @@ namespace ConsoleApp1
             string EMQFullname;
             string RGEFullname;
             string DCTFullname;
+            string AEMQFullname;
 
 
             // We have the erroRate list and now we will sort it
@@ -693,10 +737,10 @@ namespace ConsoleApp1
                 cnt1++;
             }
 
-            DCTFullname = Path.Combine(FoldToCreateFiles, "AEMQ", fileNameForFirstStatErrorRate);
+            AEMQFullname = Path.Combine(FoldToCreateFiles, "AEMQ", fileNameForFirstStatErrorRate);
 
             //after your loop
-            File.WriteAllText(DCTFullname, csv.ToString());
+            File.WriteAllText(AEMQFullname, csv.ToString());
             AEMQeeQuantileIterator.Clear();
 
         }
@@ -714,9 +758,16 @@ namespace ConsoleApp1
             int num = 0;
             List<double> keyEl = new List<double>(dictCol.Keys);
 
-
+            
             foreach (var tup in keyEl)
             {
+                if (num >= rangeRows.Count)
+                {
+                    break;
+
+                }
+
+
                 // we need to query how many values are there. 
                 int count = 0;
 
