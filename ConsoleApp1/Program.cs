@@ -34,7 +34,10 @@ namespace ConsoleApp1
         public static int SAMPLECOUNT = 10000;
         public static int RANGENUM = 200;
         public static double[] SumAll = new double[SAMPLECOUNT];
-        public static double[,] ErrorValues = new double[SAMPLECOUNT, SAMPLECOUNT];
+
+        public static Dictionary<Tuple<int, int>, double> HashMapDictionary = new Dictionary<Tuple<int, int>, double>();
+
+        //public static double[,] ErrorValues = new double[SAMPLECOUNT, SAMPLECOUNT];
         public static bool fQuantile = true, fVOptimal = true, fEquiD = true, fEquiW = true, fAlgo = true;
         public static TimeSpan tsQuantile, tsVOptimal, tsEquiD, tsEquiW, tsAlgo;
 
@@ -178,15 +181,58 @@ namespace ConsoleApp1
                 var gamma = new Gamma(2.0, 1.5, new MersenneTwister());
                 Random random = new Random(111);
                 LogNormal estimation = LogNormal.Estimate(Enumerable.Repeat(0, 134550).Select(i => random.NextDouble() * 55.0).ToArray());
+                List<int> interim = new List<int>();
 
-                List<int> interim = estimation.Samples().Take(SAMPLECOUNT).Select(n => (int)n * new Random().Next(500)).ToList();
-                List<double> colVal = interim.ConvertAll(x => (double)x);
+                // Original distribution
+                //interim = estimation.Samples().Take(SAMPLECOUNT).Select(n => (int)n * new Random().Next(500)).ToList();
 
+                // Normal distirbution
+                var original = new Normal(100.6, 20, new Mrg32k3a(100000));
+                var estimated = Normal.Estimate(original.Samples().Take(10000));
+                var samples = new double[SAMPLECOUNT];
+                Normal.Samples(SystemRandomSource.Default, samples, 1000.6, 200);
+
+
+
+                // Cauchy
+                // ===========================
+
+
+
+                // Uniform
+                // ========================
+                //Random randomDist = new Random(121231);
+                //for (int i = 0; i < SAMPLECOUNT; i++)
+                //{
+                //    interim.Add(randomDist.Next(1, 1000));
+                //}
+                //string distfile = Path.Combine("c:\\temp\\", "uniform.txt");
+                //List<double> colVal = interim.ConvertAll(x => (double)x);
+                //File.WriteAllText(distfile, String.Join("\n", colVal));
+
+                //. Random distirbution
+                //Random randomDist = new Random(121231);
+                //for (int i = 0; i < SAMPLECOUNT; i++)
+                //{
+                //    interim.Add(randomDist.Next(1, 3000000));
+                //}
+                //List<double> colVal = interim.ConvertAll(x => (double)x);
+                //string distfile = Path.Combine("c:\\temp\\", "Random.txt");
+                //File.WriteAllText(distfile, String.Join("\n", colVal));
+                ////List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
 
 
                 // We have a list of stat steps, 
                 // Now use that for queries that we need
 
+
+                // Laplace
+                // ------------------------
+                //Laplace.Samples(samples, 1000.0, 200.0);
+                //List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
+                //string distfile = Path.Combine("c:\\temp\\", "laplace.txt");
+                //File.WriteAllText(distfile, String.Join("\n", colVal));
+                
 
                 colVal.Sort();
 
@@ -284,7 +330,27 @@ namespace ConsoleApp1
         /// <param name="FoldToCreateFiles"></param>
 
         static void FillTimeSeriesDataForTests(string FoldToCreateFiles)
-        { }
+        {
+
+            var csv = new StringBuilder();
+            var newLine = string.Format("{0},{1},{2},{3},{4}", tsQuantile.ToString("s\\.fff"),
+                tsVOptimal.ToString("s\\.fff"),
+                tsEquiD.ToString("s\\.fff"),
+                tsEquiW.ToString("s\\.fff"),
+                tsAlgo.ToString("s\\.fff"));
+            csv.AppendLine(newLine);
+
+
+            //string fileNameForFirstStatErrorRate = "QuantileBased.csv";
+
+
+            string TImeFullname = Path.Combine(FoldToCreateFiles, "TimeFile.csv");
+
+            //after your loop
+            File.WriteAllText(TImeFullname, csv.ToString());
+        }
+
+
         /// <summary>
         /// This will help reduce the number of lines in the main
         /// function , as it was taking prohibitivley wrong to add
@@ -571,11 +637,11 @@ namespace ConsoleApp1
                 EMQErrorRateList.Clear();
                 RGEErrorRateList.Clear();
                 DCTErrorRateList.Clear();
+                List<StatStep> histLs = new List<StatStep>();
 
                 DateTime start = DateTime.Now;
                 // This is the portion where the actual magic happens 
                 // from within the algorithm
-                List<StatStep> histLs = new List<StatStep>();
                 CreateHistogramFromAlgorithm(colVal, histLs, 2);
                 // We are working on the follow
                 //  we have te new histogram. We will now need to do the same estimation things
@@ -855,7 +921,8 @@ namespace ConsoleApp1
 
         static void GetDCTErrorList(List<Tuple<int, int>> rangeRows, List<double> colVal, List<double> errorRateList, List<ErrorListElem> erroriterator, List<StatStep> lisS)
         {
-            int num = 0;
+            int a = 1500;
+            int num = 0;    //(a - (a*1 +a*1 - a*1));
             foreach (var tup in rangeRows)
             {
                 // we need to query how many values are there. 
@@ -898,10 +965,12 @@ namespace ConsoleApp1
                 return 0;
             }
 
+            var tuple = new Tuple<int, int>(start, end);
             // Since we will cache a lot of values, this will reduce one mroe caulcations
-            if (ErrorValues[start, end] != 0)
+            if (HashMapDictionary.ContainsKey(tuple))
             {
-                return ErrorValues[start, end];
+                // Need to return that using the tuplkey
+                return HashMapDictionary[tuple];
             }
 
             int count = end - start + 1;
@@ -916,7 +985,8 @@ namespace ConsoleApp1
                 errorsum += Math.Pow(colVal[i] - mean, 2);
             }
 
-            ErrorValues[start, end] = errorsum;
+            // Now add it to the hash map and the dicionary
+            HashMapDictionary.Add(tuple,errorsum);
             return errorsum;
         }
 
@@ -1376,6 +1446,7 @@ namespace ConsoleApp1
 
                     if (ss.distint_range_rows > 0)
                         ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                    listS.Add(ss);
                 }
 
                 current = ss;
@@ -1396,7 +1467,7 @@ namespace ConsoleApp1
             //we  have the histogram
             int countHistInit = dictCol.Count();
             List<double> keyEl = new List<double>(dictCol.Keys);
-
+            Dictionary<double, int> stepDictionary = new Dictionary<double, int>();
 
             List<HeapStatElem> lhse = new List<HeapStatElem>();
             List<double> errorList = new List<double>();
@@ -1410,12 +1481,14 @@ namespace ConsoleApp1
                 HeapStatElem hs = new HeapStatElem();
 
                 hs.range_high_key = keyEl[i * num + num - 1];
-
+                
+                stepDictionary.Add(keyEl[i * num + num - 1], i);
+                
                 // For each histogram element , add their values in the q-error metric, which is a temporary thing
                 for (int j = 0; j < num - 1; j++)
                 {
                     hs.range_rows += dictCol[keyEl[i * num + j]];
-
+                    stepDictionary.Add(keyEl[i * num + j], i);
                 }
 
                 hs.equal_rows = dictCol[keyEl[i * num + (num - 1)]];
@@ -1426,6 +1499,8 @@ namespace ConsoleApp1
 
             HeapStatElem hsElem = new HeapStatElem();
             hsElem.equal_rows = dictCol[keyEl[countHistInit - 1]];
+            stepDictionary.Add(keyEl[countHistInit - 1], lhse.Count());
+
             hsElem.range_high_key = keyEl[countHistInit - 1];
             int lastStepTot = 0;
             int d = 0;
@@ -1434,6 +1509,7 @@ namespace ConsoleApp1
                 if (i < countHistInit - 1)
                 {
                     lastStepTot += dictCol[keyEl[i]];
+                    stepDictionary.Add(keyEl[i], lhse.Count());
                     d++;
                 }
 
@@ -1459,7 +1535,7 @@ namespace ConsoleApp1
 
             foreach (var v in keyEl)
             {
-                double estimate = CalculateEMQEsitmateFromHist(ref lhse, v);
+                double estimate = CalculateEMQEsitmateFromHist(ref lhse, v, ref stepDictionary);
                 double actual = dictCol[v];
 
                 //  now we have the actual and estimate
@@ -1762,25 +1838,25 @@ namespace ConsoleApp1
 
                 }
 
-                if (k > 1 && k < heElemList.Count &&
-                    heElemList[k - 1].end + 1 != heElemList[k].start)
-                {
-                    int a = 10;
-                }
+                //if (k > 1 && k < heElemList.Count &&
+                //    heElemList[k - 1].end + 1 != heElemList[k].start)
+                //{
+                //    int a = 10;
+                //}
 
-                // Now do a quick check
-                if (k > 1 && k < heElemList.Count &&
-                    heElemList[k - 2].end + 1 != heElemList[k - 1].start)
-                {
-                    // we have an issue
-                    int a = 10;
-                }
+                //// Now do a quick check
+                //if (k > 1 && k < heElemList.Count &&
+                //    heElemList[k - 2].end + 1 != heElemList[k - 1].start)
+                //{
+                //    // we have an issue
+                //    int a = 10;
+                //}
 
-                if (k < heElemList.Count - 1 && heElemList[k].end + 1 != heElemList[k + 1].start)
-                {
-                    // we have another problem
-                    int a = 10;
-                }
+                //if (k < heElemList.Count - 1 && heElemList[k].end + 1 != heElemList[k + 1].start)
+                //{
+                //    // we have another problem
+                //    int a = 10;
+                //}
 
                 if (k > 1)
                 {
@@ -1810,7 +1886,7 @@ namespace ConsoleApp1
                 //    }
                 //}
 
-                if (true)
+                if (false)
                 {
 
                     for (int i = 0; i < heElemList.Count - 1; i++)
@@ -1970,9 +2046,20 @@ namespace ConsoleApp1
         /// <param name="his"></param>
         /// <param name="val"></param>
         /// <returns></returns>
-        static double CalculateEMQEsitmateFromHist(ref List<HeapStatElem> his, double val)
+        static double CalculateEMQEsitmateFromHist(ref List<HeapStatElem> his, double val, ref Dictionary<double, int> sortDict)
         {
+            
             double prevHi = Int32.MinValue;
+
+            int value = sortDict[val];
+            if (his[value].range_high_key == val )
+            {
+                return his[value].equal_rows;
+            }
+            else
+            {
+                return his[value].average_range_rows;
+            }
 
             for (int i = 0; i < his.Count(); i++)
             {
