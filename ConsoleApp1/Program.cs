@@ -31,9 +31,10 @@ namespace ConsoleApp1
         public static double contrib = 0.01f;
         public static int STEPS = 20;
 
-        public static int SAMPLECOUNT = 10000;
+        public static int SAMPLECOUNT = 30000;
         public static int RANGENUM = 200;
         public static double[] SumAll = new double[SAMPLECOUNT];
+        public static int NumOFRuns = 10;
 
         public static Dictionary<Tuple<int, int>, double> HashMapDictionary = new Dictionary<Tuple<int, int>, double>();
 
@@ -163,6 +164,32 @@ namespace ConsoleApp1
 
         }
 
+        /// <summary>
+        ///  WE need 2 different distribution families to 
+        ///  get data from each
+        /// </summary>
+        public enum MULTNOMIALDIST
+        {
+            MULTINOMIAL, 
+            DIRCHLET
+        }
+
+        /// <summary>
+        /// Basic distributions will be iterated
+        /// and they are going to be computed later.
+        /// </summary>
+        public enum BASICDISTYPE
+        {
+            NORMAL,
+            UNIFORM,
+            CHI,
+            PARETO,
+            RANDOM,
+            LAPLACE,
+            CAUCHY,
+            ZIPFIAN
+        }
+
         public enum TYPETEST
         {
             EMQ, RGE, DCT, AEMQ
@@ -183,135 +210,17 @@ namespace ConsoleApp1
                 LogNormal estimation = LogNormal.Estimate(Enumerable.Repeat(0, 134550).Select(i => random.NextDouble() * 55.0).ToArray());
                 List<int> interim = new List<int>();
 
-                // Original distribution
-                //interim = estimation.Samples().Take(SAMPLECOUNT).Select(n => (int)n * new Random().Next(500)).ToList();
-
-                // Normal distirbution
-                var original = new Normal(100.6, 20, new Mrg32k3a(100000));
-                var estimated = Normal.Estimate(original.Samples().Take(10000));
-                var samples = new double[SAMPLECOUNT];
-                Normal.Samples(SystemRandomSource.Default, samples, 1000.6, 200);
 
 
-
-                // Cauchy
-                // ===========================
-
-
-
-                // Uniform
-                // ========================
-                //Random randomDist = new Random(121231);
-                //for (int i = 0; i < SAMPLECOUNT; i++)
-                //{
-                //    interim.Add(randomDist.Next(1, 1000));
-                //}
-                //string distfile = Path.Combine("c:\\temp\\", "uniform.txt");
-                //List<double> colVal = interim.ConvertAll(x => (double)x);
-                //File.WriteAllText(distfile, String.Join("\n", colVal));
-
-                //. Random distirbution
-                //Random randomDist = new Random(121231);
-                //for (int i = 0; i < SAMPLECOUNT; i++)
-                //{
-                //    interim.Add(randomDist.Next(1, 3000000));
-                //}
-                //List<double> colVal = interim.ConvertAll(x => (double)x);
-                //string distfile = Path.Combine("c:\\temp\\", "Random.txt");
-                //File.WriteAllText(distfile, String.Join("\n", colVal));
-                ////List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
-
-
-                // We have a list of stat steps, 
-                // Now use that for queries that we need
-
-
-                // Laplace
-                // ------------------------
-                //Laplace.Samples(samples, 1000.0, 200.0);
-                //List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
-                //string distfile = Path.Combine("c:\\temp\\", "laplace.txt");
-                //File.WriteAllText(distfile, String.Join("\n", colVal));
-                
-
-                colVal.Sort();
-
-
-                // Need to create a sum list which helps with 
-                // fast calcualtions later on
-                for (int i = 0; i < SAMPLECOUNT; i++)
+                // Need to fill a array with quantile data for each 
+                // aglorithm type
+                foreach (BASICDISTYPE enumDistType in Enum.GetValues(typeof(BASICDISTYPE)))
                 {
-                    SumAll[i] = (i == 0) ? colVal[i] : (SumAll[i - 1] + colVal[i]);
-                }
-
-                double min = colVal.First();
-                double last = colVal.Last();
-                string quickFile = Path.Combine(folderName, "allvalues.csv");
-                if (false)
-                {
-                    quickFile = Path.Combine(folderName, "allvalues.csv");
-
-                    File.WriteAllText(quickFile, String.Join(",", colVal));
-                }
-
-                if (false)
-                {
-                    colVal.Clear();
-                    char[] delim = { ',' };
-                    colVal = File.ReadAllText(quickFile).Split(delim).Select(Double.Parse).ToList();
-                }
-
-                // Now create some rangeRow queries
-                string quickFileForRanges = Path.Combine(folderName, "rangevlaue.csv");
-                List<Tuple<int, int>> rangeRows = new List<Tuple<int, int>>();
-
-
-                // Should select between the range queries to be read from text
-                // File or directly regenerate
-                if (false)
-                {
-                    string[] lines = System.IO.File.ReadAllLines(quickFileForRanges);
-
-                    foreach (var l in lines)
+                    for (int i = 0; i < NumOFRuns; i++)
                     {
-                        string[] join = l.Split(new char[] { ',' });
-                        Tuple<int, int> ti = new Tuple<int, int>(Convert.ToInt32(join[0]), Convert.ToInt32(join[1]));
-                        rangeRows.Add(ti);
+                        RunTestsAccordingly(enumDistType);
                     }
                 }
-                else
-                {
-                    for (int i = 0; i < RANGENUM; i++)
-                    {
-                        int val = random.Next((int)min, (int)last - (int)(.8 * (last - min)));
-                        Tuple<int, int> ti = new Tuple<int, int>(val, random.Next(val + 1, (int)last));
-                        rangeRows.Add(ti);
-                    }
-                }
-
-                if (false)
-                {
-
-                    File.WriteAllText(quickFileForRanges, "");
-                    StreamWriter swq = File.AppendText(quickFileForRanges);
-
-                    foreach (var va in rangeRows)
-                    {
-                        swq.WriteLine(string.Format("{0} , {1}", va.Item1, va.Item2));
-                    }
-                    swq.Flush();
-                    swq.Close();
-                    return;
-                }
-
-                // For each type of the num ( EMQ, DCT, RGE 
-                // run test ) and find out the error range, the
-                // csv files generated will be under a different folder each time
-
-
-                RunTestForTypeTest(colVal, FoldToCreateFiles, rangeRows);
-                FillTimeSeriesDataForTests(FoldToCreateFiles);
-
 
             }
             catch (SqlException e)
@@ -323,6 +232,237 @@ namespace ConsoleApp1
             Console.ReadKey(true);
         }
 
+        static void RunTestsAccordingly()
+        {
+            // Original distribution
+            //interim = estimation.Samples().Take(SAMPLECOUNT).Select(n => (int)n * new Random().Next(500)).ToList();
+
+            // Normal distirbution
+            //============================
+            //var original = new Normal(100.6, 20, new Mrg32k3a(100000));
+            //var estimated = Normal.Estimate(original.Samples().Take(10000));
+            //var samples = new double[SAMPLECOUNT];
+            //Normal.Samples(SystemRandomSource.Default, samples, 1000.6, 200);
+
+            // Uniform
+            // ========================
+            //Random randomDist = new Random(121231);
+            //for (int i = 0; i < SAMPLECOUNT; i++)
+            //{
+            //    interim.Add(randomDist.Next(1, 1000));
+            //}
+            //string distfile = Path.Combine("c:\\temp\\", "uniform.txt");
+            //List<double> colVal = interim.ConvertAll(x => (double)x);
+            //File.WriteAllText(distfile, String.Join("\n", colVal));
+
+            //. Random distirbution
+            //Random randomDist = new Random(121231);
+            //for (int i = 0; i < SAMPLECOUNT; i++)
+            //{
+            //    interim.Add(randomDist.Next(1, 3000000));
+            //}
+            //List<double> colVal = interim.ConvertAll(x => (double)x);
+            //string distfile = Path.Combine("c:\\temp\\", "Random.txt");
+            //File.WriteAllText(distfile, String.Join("\n", colVal));
+            ////List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
+
+
+            // We have a list of stat steps, 
+            // Now use that for queries that we need
+
+
+            // Laplace
+            // ------------------------
+            //Laplace.Samples(samples, 1000.0, 200.0);
+            //List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
+            //string distfile = Path.Combine("c:\\temp\\", "laplace.txt");
+            //File.WriteAllText(distfile, String.Join("\n", colVal));
+
+
+            // Cauchy
+            // ===========================
+            //var n = new Cauchy(100,1000);
+            //n.Samples(samples);
+            //List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
+            //string distfile = Path.Combine("c:\\temp\\", "cauchy.txt");
+            //File.WriteAllText(distfile, String.Join("\n", colVal));
+
+
+            // Chi
+            //==============================
+            //var n = new Chi(3, new Random(1000));
+            //n.Samples(samples);
+            //List<double> colVal = samples.Select(i => Math.Floor(i*1000.0)).ToList();
+            //string distfile = Path.Combine("c:\\temp\\", "ch.txt");
+            //File.WriteAllText(distfile, String.Join("\n", colVal));
+
+
+            // Pareto distritubution
+            //============================
+            //var n = new Pareto(0.5, 1.5);
+            //n.Samples(samples);
+            //List<double> colVal = samples.Select(i => Math.Floor(i * 100.0)).ToList();
+            //string distfile = Path.Combine("c:\\temp\\", "pareto.txt");
+            //File.WriteAllText(distfile, String.Join("\n", colVal));
+
+
+            //Zipfian
+            //=============================
+            //var n = new Zipf(1, 31150);
+            //var samp = n.Samples();
+            //List<double> colVal = new List<double>();
+            //int count = 0;
+            //foreach (int i in samp)
+            //{
+            //    colVal.Add(i*10);
+            //    count++;
+            //    if (count == 10000)
+            //        break;
+            //}
+            ////.ToList().ConvertAll(x=>(double)x).ToArray();
+            ////List<double> colVal = samples.Select(i => Math.Floor(i * 100.0)).ToList();
+            //string distfile = Path.Combine("c:\\temp\\", "zipf.txt");
+            //File.WriteAllText(distfile, string.Join("\n", colVal));
+
+
+            // MultiNormal ( make sure to do 3 from one format and then one with drichlet
+            //=============================================
+            //int Min = 0;
+            //int Max = 10;
+            //const int HOWMANY = 20;
+            //Random randNum = new Random();
+            //double[] test2 = Enumerable.Repeat(0, HOWMANY).Select(i => randNum.Next(Min, Max)).ToList().ConvertAll(x=>(double)(x)).ToArray();
+
+            //var original = new Multinomial(test2,10000);
+
+            //var estimated = original.Samples().Take(SAMPLECOUNT/ HOWMANY);
+            //var samples = new double[SAMPLECOUNT];
+            //int count = 0;
+            //foreach (var v in estimated)
+            //{
+            //    for (int i = 0; i < HOWMANY; i++)
+            //    {
+            //        samples[count*HOWMANY + i] = v[i];
+            //    }
+            //    count++;
+            //}
+            //List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
+            //string distfile = Path.Combine("c:\\temp\\", "multinorm2.txt");
+            //File.WriteAllText(distfile, string.Join("\n", colVal));
+
+            // Drichlet
+            //=======================================
+            int Min = 1000000;
+            int Max = 1000100;
+            const int HOWMANY = 3;
+            Random randNum = new Random();
+            //double[] test2 = Enumerable.Repeat(0, HOWMANY).Select(i => randNum.Next(Min, Max)).ToList().ConvertAll(x => (double)(x)).ToArray();
+
+            var original = new Dirichlet(1.2, SAMPLECOUNT);
+            var samples = new double[SAMPLECOUNT];
+
+            var estimated = original.Sample();
+            //samples[i] = Convert.ToDouble(estimated);
+
+            List<double> colVal = estimated.Select(i => Math.Floor(i * randNum.Next(Min, Max))).ToList();
+            //string distfile = Path.Combine("c:\\temp\\", "dirichlet.txt");
+            //File.WriteAllText(distfile, string.Join("\n", colVal));
+
+            //Normal.Samples(SystemRandomSource.Default, samples, 1000.6, 200);
+
+            // Now run the test, that the data is generated.
+            RunTestsOnceDataIsGenerated(FoldToCreateFiles, colVal);
+
+
+        }
+
+        /// <summary>
+        /// Refactoring from the above function, so that we have t
+        /// </summary>
+        static void RunTestsOnceDataIsGenerated(string FoldToCreateFiles, List<double> colVal)
+        {
+
+            // Now sort the data , that you got from the 
+            // different data distribution generators.
+            colVal.Sort();
+
+
+            // Need to create a sum list which helps with 
+            // fast calcualtions later on
+            for (int i = 0; i < SAMPLECOUNT; i++)
+            {
+                SumAll[i] = (i == 0) ? colVal[i] : (SumAll[i - 1] + colVal[i]);
+            }
+
+            double min = colVal.First();
+            double last = colVal.Last();
+            string quickFile = Path.Combine(folderName, "allvalues.csv");
+            if (false)
+            {
+                quickFile = Path.Combine(folderName, "allvalues.csv");
+
+                File.WriteAllText(quickFile, String.Join(",", colVal));
+            }
+
+            if (false)
+            {
+                colVal.Clear();
+                char[] delim = { ',' };
+                colVal = File.ReadAllText(quickFile).Split(delim).Select(Double.Parse).ToList();
+            }
+
+            // Now create some rangeRow queries
+            string quickFileForRanges = Path.Combine(folderName, "rangevlaue.csv");
+            List<Tuple<int, int>> rangeRows = new List<Tuple<int, int>>();
+
+
+            // Should select between the range queries to be read from text
+            // File or directly regenerate
+            if (false)
+            {
+                string[] lines = System.IO.File.ReadAllLines(quickFileForRanges);
+
+                foreach (var l in lines)
+                {
+                    string[] join = l.Split(new char[] { ',' });
+                    Tuple<int, int> ti = new Tuple<int, int>(Convert.ToInt32(join[0]), Convert.ToInt32(join[1]));
+                    rangeRows.Add(ti);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < RANGENUM; i++)
+                {
+                    int val = random.Next((int)min, (int)last - (int)(.8 * (last - min)));
+                    Tuple<int, int> ti = new Tuple<int, int>(val, random.Next(val + 1, (int)last));
+                    rangeRows.Add(ti);
+                }
+            }
+
+            if (false)
+            {
+
+                File.WriteAllText(quickFileForRanges, "");
+                StreamWriter swq = File.AppendText(quickFileForRanges);
+
+                foreach (var va in rangeRows)
+                {
+                    swq.WriteLine(string.Format("{0} , {1}", va.Item1, va.Item2));
+                }
+                swq.Flush();
+                swq.Close();
+                return;
+            }
+
+            // For each type of the num ( EMQ, DCT, RGE 
+            // run test ) and find out the error range, the
+            // csv files generated will be under a different folder each time
+
+
+            RunTestForTypeTest(colVal, FoldToCreateFiles, rangeRows);
+            FillTimeSeriesDataForTests(FoldToCreateFiles);
+
+        }
         /// <summary>
         /// Print all the times, that will help
         /// 
@@ -478,7 +618,7 @@ namespace ConsoleApp1
 
 
                 DateTime start = DateTime.Now;
-                
+
                 // Also create the stat steps for the equi depth case.
                 //CreateVOptimalHistogram(colVal, lisEquiDepth, sumTotal);
                 CreateVOptimalHistogramJag(colVal, lisVOptimal, sumTotal);
@@ -500,7 +640,7 @@ namespace ConsoleApp1
 
                 FillFiles(FoldToCreateFiles,
                     rangeRows,
-                    EMQErrorRateList, RGEErrorRateList, 
+                    EMQErrorRateList, RGEErrorRateList,
                     DCTErrorRateList, ActualEMQErrorRateList,
                     "VOptimalHistogram.csv",
                     EMQeeVOptimalIterator,
@@ -656,7 +796,7 @@ namespace ConsoleApp1
 
                 FillFiles(FoldToCreateFiles,
                       rangeRows,
-                      EMQErrorRateList, RGEErrorRateList, 
+                      EMQErrorRateList, RGEErrorRateList,
                       DCTErrorRateList, ActualEMQErrorRateList,
                       "AlgorithmHistogram.csv",
                       AlgoEMQeeDepthIterator,
@@ -824,7 +964,7 @@ namespace ConsoleApp1
             int num = 0;
             List<double> keyEl = new List<double>(dictCol.Keys);
 
-            
+
             foreach (var tup in keyEl)
             {
                 if (num >= rangeRows.Count)
@@ -868,15 +1008,15 @@ namespace ConsoleApp1
             erroriterator.Sort();
         }
 
-            /// <summary>
-            /// Range Range Errors
-            /// </summary>
-            /// <param name="rangeRows"></param>
-            /// <param name="colVal"></param>
-            /// <param name="errorRateList"></param>
-            /// <param name="erroriterator"></param>
-            /// <param name="lisS"></param>
-            static void GetEMQErrorList(List<Tuple<int, int>> rangeRows, List<double> colVal, List<double> errorRateList, List<ErrorListElem> erroriterator, List<StatStep> lisS)
+        /// <summary>
+        /// Range Range Errors
+        /// </summary>
+        /// <param name="rangeRows"></param>
+        /// <param name="colVal"></param>
+        /// <param name="errorRateList"></param>
+        /// <param name="erroriterator"></param>
+        /// <param name="lisS"></param>
+        static void GetEMQErrorList(List<Tuple<int, int>> rangeRows, List<double> colVal, List<double> errorRateList, List<ErrorListElem> erroriterator, List<StatStep> lisS)
         {
             int num = 0;
             List<double> keyEl = new List<double>(dictCol.Keys);
@@ -986,7 +1126,7 @@ namespace ConsoleApp1
             }
 
             // Now add it to the hash map and the dicionary
-            HashMapDictionary.Add(tuple,errorsum);
+            HashMapDictionary.Add(tuple, errorsum);
             return errorsum;
         }
 
@@ -1044,7 +1184,7 @@ namespace ConsoleApp1
                     }
                 }
 
-                ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                ss.average_range_rows = ss.range_rows / ((ss.distint_range_rows == 0) ? 1 : ss.distint_range_rows);
 
                 listS.Add(ss);
 
@@ -1357,7 +1497,7 @@ namespace ConsoleApp1
                         ss.range_high_key = (int)keyEl[i];
                         ss.distint_range_rows = count - 1;
                         ss.range_rows = pre;
-                        ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                        ss.average_range_rows = ss.range_rows / ((ss.distint_range_rows == 0) ? 1 : ss.distint_range_rows);
                         listS.Add(ss);
                         break;
                     }
@@ -1423,7 +1563,7 @@ namespace ConsoleApp1
                     }
 
                     if (ss.distint_range_rows > 0)
-                        ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                        ss.average_range_rows = ss.range_rows / ((ss.distint_range_rows == 0) ? 1 : ss.distint_range_rows);
                     // else it will be 0, which is fine.
 
 
@@ -1445,7 +1585,7 @@ namespace ConsoleApp1
                     }
 
                     if (ss.distint_range_rows > 0)
-                        ss.average_range_rows = ss.range_rows / ss.distint_range_rows;
+                        ss.average_range_rows = ss.range_rows / ((ss.distint_range_rows == 0) ? 1 : ss.distint_range_rows);
                     listS.Add(ss);
                 }
 
@@ -1481,9 +1621,9 @@ namespace ConsoleApp1
                 HeapStatElem hs = new HeapStatElem();
 
                 hs.range_high_key = keyEl[i * num + num - 1];
-                
+
                 stepDictionary.Add(keyEl[i * num + num - 1], i);
-                
+
                 // For each histogram element , add their values in the q-error metric, which is a temporary thing
                 for (int j = 0; j < num - 1; j++)
                 {
@@ -1493,7 +1633,7 @@ namespace ConsoleApp1
 
                 hs.equal_rows = dictCol[keyEl[i * num + (num - 1)]];
                 hs.distint_range_rows = num - 1;
-                hs.average_range_rows = hs.range_rows / hs.distint_range_rows;
+                hs.average_range_rows = hs.range_rows / ((hs.distint_range_rows == 0) ? 1 : hs.distint_range_rows);
                 lhse.Add(hs);
             }
 
@@ -2048,11 +2188,11 @@ namespace ConsoleApp1
         /// <returns></returns>
         static double CalculateEMQEsitmateFromHist(ref List<HeapStatElem> his, double val, ref Dictionary<double, int> sortDict)
         {
-            
+
             double prevHi = Int32.MinValue;
 
             int value = sortDict[val];
-            if (his[value].range_high_key == val )
+            if (his[value].range_high_key == val)
             {
                 return his[value].equal_rows;
             }
