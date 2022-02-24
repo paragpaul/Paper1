@@ -18,6 +18,10 @@ namespace ConsoleApp1
     {
         public static SortedDictionary<double, int> dictCol = new SortedDictionary<double, int>();
 
+        public static string dirName = DateTime.Now.ToString("MM_dd_yyyy_HH_mm_tt");
+        public const string folderName = @"D:\Work\Stats\Exper";
+
+
         public const string TableName = "[Sales].[SalesOrderDetail]";
         public const string ColName = "LineTotal";
         public const string statname1 = "stat1";
@@ -30,6 +34,11 @@ namespace ConsoleApp1
         public static double minalpha = 0;
         public static double contrib = 0.01f;
         public static int STEPS = 20;
+        public static int basicDistCount = Enum.GetNames(typeof(BASICDISTYPE)).Length;
+        public static int multdistcount = Enum.GetNames(typeof(MULTNOMIALDIST)).Length;
+        public static int typeCount = Enum.GetNames(typeof(TYPETEST)).Length;
+        public static int algoCount = Enum.GetNames(typeof(ALGOTYPE)).Length;
+        public static int quantileCount = Enum.GetNames(typeof(QUANTILE)).Length;
 
         public static int SAMPLECOUNT = 30000;
         public static int RANGENUM = 200;
@@ -38,7 +47,15 @@ namespace ConsoleApp1
 
         public static Dictionary<Tuple<int, int>, double> HashMapDictionary = new Dictionary<Tuple<int, int>, double>();
 
-        //public static double[,] ErrorValues = new double[SAMPLECOUNT, SAMPLECOUNT];
+        // THis is the one need to find out for each type
+        // what are the error rates
+
+
+
+        public static double[,,,] DistErrorValues = new double[typeCount, algoCount, basicDistCount, quantileCount];
+        public static double[,,,] MultiNomialErrorValues = new double[typeCount, algoCount, multdistcount, quantileCount];
+
+
         public static bool fQuantile = true, fVOptimal = true, fEquiD = true, fEquiW = true, fAlgo = true;
         public static TimeSpan tsQuantile, tsVOptimal, tsEquiD, tsEquiW, tsAlgo;
 
@@ -170,7 +187,9 @@ namespace ConsoleApp1
         /// </summary>
         public enum MULTNOMIALDIST
         {
-            MULTINOMIAL, 
+            MULTINOMIAL3,
+            MULTINOMIAL6,
+            MULTINOMIAL10,
             DIRCHLET
         }
 
@@ -195,20 +214,42 @@ namespace ConsoleApp1
             EMQ, RGE, DCT, AEMQ
         }
 
+        public enum ALGOTYPE
+        {
+            EW,
+            ED,
+            V,
+            Q,
+            QH
+        }
+
+        public enum QUANTILE
+        {
+            Q25,
+            Q50,
+            Q75,
+            Q90,
+            Q95,
+            Q99,
+            Q100
+        }
+
+        public static int[] quantVal = { 25, 50, 75, 90, 95, 99, 100 };
+
         public readonly Random _random = new Random();
         static void Main(string[] args)
         {
+            Random random = new Random(111);
             int readFromFile = 0;
             try
             {
-                string folderName = @"D:\Work\Stats\Exper";
-                string dirName = DateTime.Now.ToString("MM_dd_yyyy_HH_mm_tt");
+
                 string FoldToCreateFiles = Path.Combine(folderName, dirName);
 
                 var gamma = new Gamma(2.0, 1.5, new MersenneTwister());
-                Random random = new Random(111);
+
                 LogNormal estimation = LogNormal.Estimate(Enumerable.Repeat(0, 134550).Select(i => random.NextDouble() * 55.0).ToArray());
-                List<int> interim = new List<int>();
+
 
 
 
@@ -218,7 +259,7 @@ namespace ConsoleApp1
                 {
                     for (int i = 0; i < NumOFRuns; i++)
                     {
-                        RunTestsAccordingly(enumDistType);
+                        RunTestsAccordingly(FoldToCreateFiles, true, enumDistType, MULTNOMIALDIST.DIRCHLET);
                     }
                 }
 
@@ -232,146 +273,226 @@ namespace ConsoleApp1
             Console.ReadKey(true);
         }
 
-        static void RunTestsAccordingly()
+
+        /// <summary>
+        /// Based on the  type of the distribution , the work is done. 
+        /// </summary>
+        /// <param name="FoldToCreateFiles"></param>
+        /// <param name="isBasic"></param>
+        /// <param name="basicType"></param>
+        /// <param name="multinomialType"></param>
+        static void RunTestsAccordingly(string FoldToCreateFiles, bool isBasic, BASICDISTYPE basicType, MULTNOMIALDIST multinomialType)
         {
-            // Original distribution
-            //interim = estimation.Samples().Take(SAMPLECOUNT).Select(n => (int)n * new Random().Next(500)).ToList();
-
-            // Normal distirbution
-            //============================
-            //var original = new Normal(100.6, 20, new Mrg32k3a(100000));
-            //var estimated = Normal.Estimate(original.Samples().Take(10000));
-            //var samples = new double[SAMPLECOUNT];
-            //Normal.Samples(SystemRandomSource.Default, samples, 1000.6, 200);
-
-            // Uniform
-            // ========================
-            //Random randomDist = new Random(121231);
-            //for (int i = 0; i < SAMPLECOUNT; i++)
-            //{
-            //    interim.Add(randomDist.Next(1, 1000));
-            //}
-            //string distfile = Path.Combine("c:\\temp\\", "uniform.txt");
-            //List<double> colVal = interim.ConvertAll(x => (double)x);
-            //File.WriteAllText(distfile, String.Join("\n", colVal));
-
-            //. Random distirbution
-            //Random randomDist = new Random(121231);
-            //for (int i = 0; i < SAMPLECOUNT; i++)
-            //{
-            //    interim.Add(randomDist.Next(1, 3000000));
-            //}
-            //List<double> colVal = interim.ConvertAll(x => (double)x);
-            //string distfile = Path.Combine("c:\\temp\\", "Random.txt");
-            //File.WriteAllText(distfile, String.Join("\n", colVal));
-            ////List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
-
-
-            // We have a list of stat steps, 
-            // Now use that for queries that we need
-
-
-            // Laplace
-            // ------------------------
-            //Laplace.Samples(samples, 1000.0, 200.0);
-            //List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
-            //string distfile = Path.Combine("c:\\temp\\", "laplace.txt");
-            //File.WriteAllText(distfile, String.Join("\n", colVal));
-
-
-            // Cauchy
-            // ===========================
-            //var n = new Cauchy(100,1000);
-            //n.Samples(samples);
-            //List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
-            //string distfile = Path.Combine("c:\\temp\\", "cauchy.txt");
-            //File.WriteAllText(distfile, String.Join("\n", colVal));
-
-
-            // Chi
-            //==============================
-            //var n = new Chi(3, new Random(1000));
-            //n.Samples(samples);
-            //List<double> colVal = samples.Select(i => Math.Floor(i*1000.0)).ToList();
-            //string distfile = Path.Combine("c:\\temp\\", "ch.txt");
-            //File.WriteAllText(distfile, String.Join("\n", colVal));
-
-
-            // Pareto distritubution
-            //============================
-            //var n = new Pareto(0.5, 1.5);
-            //n.Samples(samples);
-            //List<double> colVal = samples.Select(i => Math.Floor(i * 100.0)).ToList();
-            //string distfile = Path.Combine("c:\\temp\\", "pareto.txt");
-            //File.WriteAllText(distfile, String.Join("\n", colVal));
-
-
-            //Zipfian
-            //=============================
-            //var n = new Zipf(1, 31150);
-            //var samp = n.Samples();
-            //List<double> colVal = new List<double>();
-            //int count = 0;
-            //foreach (int i in samp)
-            //{
-            //    colVal.Add(i*10);
-            //    count++;
-            //    if (count == 10000)
-            //        break;
-            //}
-            ////.ToList().ConvertAll(x=>(double)x).ToArray();
-            ////List<double> colVal = samples.Select(i => Math.Floor(i * 100.0)).ToList();
-            //string distfile = Path.Combine("c:\\temp\\", "zipf.txt");
-            //File.WriteAllText(distfile, string.Join("\n", colVal));
-
-
-            // MultiNormal ( make sure to do 3 from one format and then one with drichlet
-            //=============================================
-            //int Min = 0;
-            //int Max = 10;
-            //const int HOWMANY = 20;
-            //Random randNum = new Random();
-            //double[] test2 = Enumerable.Repeat(0, HOWMANY).Select(i => randNum.Next(Min, Max)).ToList().ConvertAll(x=>(double)(x)).ToArray();
-
-            //var original = new Multinomial(test2,10000);
-
-            //var estimated = original.Samples().Take(SAMPLECOUNT/ HOWMANY);
-            //var samples = new double[SAMPLECOUNT];
-            //int count = 0;
-            //foreach (var v in estimated)
-            //{
-            //    for (int i = 0; i < HOWMANY; i++)
-            //    {
-            //        samples[count*HOWMANY + i] = v[i];
-            //    }
-            //    count++;
-            //}
-            //List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
-            //string distfile = Path.Combine("c:\\temp\\", "multinorm2.txt");
-            //File.WriteAllText(distfile, string.Join("\n", colVal));
-
-            // Drichlet
-            //=======================================
-            int Min = 1000000;
-            int Max = 1000100;
-            const int HOWMANY = 3;
+            // This will be filled up later
+            List<double> colVal = new List<double>();
             Random randNum = new Random();
-            //double[] test2 = Enumerable.Repeat(0, HOWMANY).Select(i => randNum.Next(Min, Max)).ToList().ConvertAll(x => (double)(x)).ToArray();
-
-            var original = new Dirichlet(1.2, SAMPLECOUNT);
+            List<int> interim = new List<int>();
             var samples = new double[SAMPLECOUNT];
+            // Original distribution
 
-            var estimated = original.Sample();
-            //samples[i] = Convert.ToDouble(estimated);
+            // Fopr multinomial
+            int HOWMANY = 3;
 
-            List<double> colVal = estimated.Select(i => Math.Floor(i * randNum.Next(Min, Max))).ToList();
+            if (isBasic)
+            {
+                // Normal distirbution
+                //============================
+                if (basicType == BASICDISTYPE.NORMAL)
+                {
+                    var original = new Normal(100.6, 20, new Mrg32k3a(100000));
+                    var estimated = Normal.Estimate(original.Samples().Take(SAMPLECOUNT));
+
+
+                    Normal.Samples(SystemRandomSource.Default, samples, 1000.6, 200);
+                    colVal = samples.ToList();
+                }
+                else if (basicType == BASICDISTYPE.UNIFORM)
+                {
+                    var original = new Normal(100.6, 20, new Mrg32k3a(100000));
+                    var estimated = Normal.Estimate(original.Samples().Take(SAMPLECOUNT));
+                    // interim = estimated.Samples().Take(SAMPLECOUNT).Select(n => (int)n * new Random().Next(500)).ToList();
+                    // Uniform
+                    // ========================
+                    Random randomDist = new Random(121231);
+                    for (int i = 0; i < SAMPLECOUNT; i++)
+                    {
+                        colVal.Add(randomDist.Next(1, 1000));
+                    }
+
+
+                    //string distfile = Path.Combine("c:\\temp\\", "uniform.txt");
+
+
+                    //List<double> colVal = interim.ConvertAll(x => (double)x);
+                    //File.WriteAllText(distfile, String.Join("\n", colVal));
+                }
+                else if (basicType == BASICDISTYPE.RANDOM)
+                {
+
+                    // Random distirbution
+                    //==============================
+                    Random randomDist = new Random(121231);
+                    for (int i = 0; i < SAMPLECOUNT; i++)
+                    {
+                        interim.Add(randomDist.Next(1, 3000000));
+                    }
+                    colVal = interim.ConvertAll(x => (double)x);
+                    //string distfile = Path.Combine("c:\\temp\\", "Random.txt");
+                    //File.WriteAllText(distfile, String.Join("\n", colVal));
+                    ////List<double> colVal = samples.Select(i => Math.Floor(i)).ToList();
+
+                }
+                else if (basicType == BASICDISTYPE.LAPLACE)
+                {
+
+                    // We have a list of stat steps, 
+                    // Now use that for queries that we need
+
+
+                    // Laplace
+                    // ------------------------
+                    Laplace.Samples(samples, 1000.0, 200.0);
+                    colVal = samples.Select(i => Math.Floor(i)).ToList();
+
+
+                    //string distfile = Path.Combine("c:\\temp\\", "laplace.txt");
+                    //File.WriteAllText(distfile, String.Join("\n", colVal));
+
+                }
+                else if (basicType == BASICDISTYPE.CAUCHY)
+                {
+                    // Cauchy
+                    // ===========================
+                    var n = new Cauchy(100, 1000);
+                    n.Samples(samples);
+                    colVal = samples.Select(i => Math.Floor(i)).ToList();
+                    //string distfile = Path.Combine("c:\\temp\\", "cauchy.txt");
+                    //File.WriteAllText(distfile, String.Join("\n", colVal));
+                }
+                else if (basicType == BASICDISTYPE.CAUCHY)
+                {
+
+                    // Chi
+                    //==============================
+                    var n = new Chi(3, new Random(1000));
+                    n.Samples(samples);
+                    colVal = samples.Select(i => Math.Floor(i * 1000.0)).ToList();
+                    //string distfile = Path.Combine("c:\\temp\\", "ch.txt");
+                    //File.WriteAllText(distfile, String.Join("\n", colVal));
+                }
+                else if (basicType == BASICDISTYPE.PARETO)
+                {
+
+                    // Pareto distritubution
+                    //============================
+                    var n = new Pareto(0.5, 1.5);
+                    n.Samples(samples);
+                    colVal = samples.Select(i => Math.Floor(i * 100.0)).ToList();
+                    //string distfile = Path.Combine("c:\\temp\\", "pareto.txt");
+                    //File.WriteAllText(distfile, String.Join("\n", colVal));
+
+                }
+                else if (basicType == BASICDISTYPE.ZIPFIAN)
+                {
+                    //Zipfian
+                    //=============================
+                    var n = new Zipf(1, 31150);
+                    var samp = n.Samples();
+                    colVal = new List<double>();
+                    int count = 0;
+                    foreach (int i in samp)
+                    {
+                        colVal.Add(i * 10);
+                        count++;
+                        if (count == 10000)
+                            break;
+                    }
+                    ////.ToList().ConvertAll(x=>(double)x).ToArray();
+                    colVal = samples.Select(i => Math.Floor(i * 100.0)).ToList();
+                    //string distfile = Path.Combine("c:\\temp\\", "zipf.txt");
+                    //File.WriteAllText(distfile, string.Join("\n", colVal));
+
+
+
+                    //string distfile = Path.Combine("c:\\temp\\", "multinorm2.txt");
+                    //File.WriteAllText(distfile, string.Join("\n", colVal));
+
+                }
+                else
+                {
+                    // Do nothing . All the distributionsa are done
+                }
+
+            }
+
+            if (isBasic == false)
+            {
+                if (multinomialType == MULTNOMIALDIST.DIRCHLET)
+                {
+                    // Drichlet
+                    //=======================================
+                    int Min = 1000000;
+                    int Max = 1000100;
+
+
+                    //double[] test2 = Enumerable.Repeat(0, HOWMANY).Select(i => randNum.Next(Min, Max)).ToList().ConvertAll(x => (double)(x)).ToArray();
+
+                    var original = new Dirichlet(1.2, SAMPLECOUNT);
+                    samples = new double[SAMPLECOUNT];
+
+                    var estimated = original.Sample();
+                    colVal = estimated.Select(i => Math.Floor(i * randNum.Next(Min, Max))).ToList();
+                    //samples[i] = Convert.ToDouble(estimated);
+                }
+                else
+                {
+                    // MultiNormal ( make sure to do 3 from one format and then one with drichlet
+                    //=============================================
+                    int Min = 0;
+                    int Max = 10;
+                    //const int HOWMANY = 20;
+                    randNum = new Random();
+                    double[] test2 = Enumerable.Repeat(0, HOWMANY).Select(i => randNum.Next(Min, Max)).ToList().ConvertAll(x => (double)(x)).ToArray();
+
+                    switch (multinomialType)
+                    {
+                        case MULTNOMIALDIST.MULTINOMIAL3:
+                            HOWMANY = 3;
+                            break;
+                        case MULTNOMIALDIST.MULTINOMIAL6:
+                            HOWMANY = 6;
+                            break;
+                        case MULTNOMIALDIST.MULTINOMIAL10:
+                            HOWMANY = 10;
+                            break;
+                        default:
+                            break;
+                    }
+                    var original = new Multinomial(test2, 10000);
+
+                    var estimated = original.Samples().Take(SAMPLECOUNT / HOWMANY);
+                    samples = new double[SAMPLECOUNT];
+                    int count = 0;
+                    foreach (var v in estimated)
+                    {
+                        for (int i = 0; i < HOWMANY; i++)
+                        {
+                            samples[count * HOWMANY + i] = v[i];
+                        }
+                        count++;
+                    }
+                    colVal = samples.Select(i => Math.Floor(i)).ToList();
+                }
+            }
+
             //string distfile = Path.Combine("c:\\temp\\", "dirichlet.txt");
             //File.WriteAllText(distfile, string.Join("\n", colVal));
 
             //Normal.Samples(SystemRandomSource.Default, samples, 1000.6, 200);
 
             // Now run the test, that the data is generated.
-            RunTestsOnceDataIsGenerated(FoldToCreateFiles, colVal);
+            RunTestsOnceDataIsGenerated(isBasic, basicType, multinomialType,
+                FoldToCreateFiles, colVal);
 
 
         }
@@ -379,12 +500,16 @@ namespace ConsoleApp1
         /// <summary>
         /// Refactoring from the above function, so that we have t
         /// </summary>
-        static void RunTestsOnceDataIsGenerated(string FoldToCreateFiles, List<double> colVal)
+        static void RunTestsOnceDataIsGenerated(bool isBasic, BASICDISTYPE basicType,
+            MULTNOMIALDIST multinomialType, string FoldToCreateFiles,
+            List<double> colVal)
         {
 
             // Now sort the data , that you got from the 
             // different data distribution generators.
             colVal.Sort();
+            Random randNum = new Random();
+            Random random = new Random(111);
 
 
             // Need to create a sum list which helps with 
@@ -459,8 +584,9 @@ namespace ConsoleApp1
             // csv files generated will be under a different folder each time
 
 
-            RunTestForTypeTest(colVal, FoldToCreateFiles, rangeRows);
-            FillTimeSeriesDataForTests(FoldToCreateFiles);
+            RunTestForTypeTest(isBasic, basicType, multinomialType,
+                colVal, FoldToCreateFiles, rangeRows);
+            //FillTimeSeriesDataForTests(FoldToCreateFiles);
 
         }
         /// <summary>
@@ -498,8 +624,15 @@ namespace ConsoleApp1
         /// </summary>
         /// <param name="t"></param>
         /// <param name="colVal"></param>
-        static void RunTestForTypeTest(List<double> colVal, string FoldToCreateFiles, List<Tuple<int, int>> rangeRows)
+        static void RunTestForTypeTest(bool isBasic, BASICDISTYPE basicType, MULTNOMIALDIST multinomialType,
+            List<double> colVal, string FoldToCreateFiles,
+            List<Tuple<int, int>> rangeRows, bool ShouldFillFile = false)
         {
+
+            // DistErrorValues = new double[typeCount, algoCount, basicDistCount];
+            //MultiNomialErrorValues = new double[typeCount, algoCount, multdistcount];
+
+
             List<double> ActualEMQErrorRateList = new List<double>();
             List<double> EMQErrorRateList = new List<double>();
             List<double> RGEErrorRateList = new List<double>();
@@ -583,16 +716,28 @@ namespace ConsoleApp1
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, EMQeeQuantileIterator, lisQuantile);
                 GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, RGEeeQuantileIterator, lisQuantile);
                 GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, DCTeeQuantileIterator, lisQuantile);
+                EMQErrorRateList.Sort();
+                ActualEMQErrorRateList.Sort();
+                RGEErrorRateList.Sort();
+                DCTErrorRateList.Sort();
 
 
-                FillFiles(FoldToCreateFiles,
-                    rangeRows,
-                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList,
-                    "QuantileBased.csv",
-                    EMQeeQuantileIterator,
-                    RGEeeQuantileIterator,
-                    DCTeeQuantileIterator,
-                    AEMQeeQuantileIterator);
+                // This will alone help fill the data
+                FillErrorMatrix(isBasic, basicType, multinomialType, ALGOTYPE.Q,
+                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList);
+
+
+                if (ShouldFillFile)
+                {
+                    FillFiles(FoldToCreateFiles,
+                        rangeRows,
+                        EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList,
+                        "QuantileBased.csv",
+                        EMQeeQuantileIterator,
+                        RGEeeQuantileIterator,
+                        DCTeeQuantileIterator,
+                        AEMQeeQuantileIterator);
+                }
             }
 
 
@@ -631,23 +776,34 @@ namespace ConsoleApp1
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, EMQeeVOptimalIterator, lisVOptimal);
                 GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, RGEeeVOptimalIterator, lisVOptimal);
                 GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, DCTeeVOptimalIterator, lisVOptimal);
-
-                // We have the erroRate list and now we will sort it
                 EMQErrorRateList.Sort();
+                ActualEMQErrorRateList.Sort();
+                RGEErrorRateList.Sort();
+                DCTErrorRateList.Sort();
+                // We have the erroRate list and now we will sort it
+                //EMQErrorRateList.Sort();
                 EMQErrorRateList.ForEach(Console.WriteLine);
 
 
 
-                FillFiles(FoldToCreateFiles,
-                    rangeRows,
-                    EMQErrorRateList, RGEErrorRateList,
-                    DCTErrorRateList, ActualEMQErrorRateList,
-                    "VOptimalHistogram.csv",
-                    EMQeeVOptimalIterator,
-                    RGEeeVOptimalIterator,
-                    DCTeeVOptimalIterator,
-                    AEMQeeVOptimalIterator);
+                FillErrorMatrix(isBasic, basicType, multinomialType, ALGOTYPE.V,
+                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList);
 
+
+
+                if (ShouldFillFile)
+                {
+
+                    FillFiles(FoldToCreateFiles,
+                        rangeRows,
+                        EMQErrorRateList, RGEErrorRateList,
+                        DCTErrorRateList, ActualEMQErrorRateList,
+                        "VOptimalHistogram.csv",
+                        EMQeeVOptimalIterator,
+                        RGEeeVOptimalIterator,
+                        DCTeeVOptimalIterator,
+                        AEMQeeVOptimalIterator);
+                }
             }
 
             if (fEquiD)
@@ -677,24 +833,32 @@ namespace ConsoleApp1
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, EquiDEMQeeDepthIterator, lisEquiDepth);
                 GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, EquiDRGEeeDepthIterator, lisEquiDepth);
                 GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, EquiDDCTeeDepthIterator, lisEquiDepth);
-
-                // We have the erroRate list and now we will sort it
                 EMQErrorRateList.Sort();
-                EMQErrorRateList.ForEach(Console.WriteLine);
-
-
+                ActualEMQErrorRateList.Sort();
                 RGEErrorRateList.Sort();
                 DCTErrorRateList.Sort();
+                // We have the erroRate list and now we will sort it
+                //EMQErrorRateList.Sort();
+                //EMQErrorRateList.ForEach(Console.WriteLine);
 
-                FillFiles(FoldToCreateFiles,
-                    rangeRows,
-                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList,
-                    "EquiDepthHistogram.csv",
-                    EquiDEMQeeDepthIterator,
-                    EquiDRGEeeDepthIterator,
-                    EquiDDCTeeDepthIterator,
-                    EquiDAEMQeeDepthIterator);
 
+                //RGEErrorRateList.Sort();
+                //DCTErrorRateList.Sort();
+                FillErrorMatrix(isBasic, basicType, multinomialType, ALGOTYPE.ED,
+                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList);
+
+
+                if (ShouldFillFile)
+                {
+                    FillFiles(FoldToCreateFiles,
+                        rangeRows,
+                        EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList,
+                        "EquiDepthHistogram.csv",
+                        EquiDEMQeeDepthIterator,
+                        EquiDRGEeeDepthIterator,
+                        EquiDDCTeeDepthIterator,
+                        EquiDAEMQeeDepthIterator);
+                }
                 //using (SqlCommand command = new SqlCommand(sql, connection))
                 //{
 
@@ -745,24 +909,33 @@ namespace ConsoleApp1
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, EquiWEMQeeDepthIterator, lisEquiWidth);
                 GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, EquiWRGEeeDepthIterator, lisEquiWidth);
                 GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, EquiWDCTeeDepthIterator, lisEquiWidth);
-
-                // We have the erroRate list and now we will sort it
                 EMQErrorRateList.Sort();
-                EMQErrorRateList.ForEach(Console.WriteLine);
+                ActualEMQErrorRateList.Sort();
                 RGEErrorRateList.Sort();
                 DCTErrorRateList.Sort();
+                // We have the erroRate list and now we will sort it
+                //EMQErrorRateList.Sort();
+                //EMQErrorRateList.ForEach(Console.WriteLine);
+                //RGEErrorRateList.Sort();
+                //DCTErrorRateList.Sort();
+
+                FillErrorMatrix(isBasic, basicType, multinomialType, ALGOTYPE.EW,
+                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList);
 
 
-                FillFiles(FoldToCreateFiles,
-                         rangeRows,
-                         EMQErrorRateList, RGEErrorRateList,
-                         DCTErrorRateList, ActualEMQErrorRateList,
-                         "EquiWidthHistogram.csv",
-                         EquiWEMQeeDepthIterator,
-                         EquiWRGEeeDepthIterator,
-                         EquiWDCTeeDepthIterator,
-                         EquiWAEMQeeDepthIterator);
+                if (ShouldFillFile)
+                {
 
+                    FillFiles(FoldToCreateFiles,
+                             rangeRows,
+                             EMQErrorRateList, RGEErrorRateList,
+                             DCTErrorRateList, ActualEMQErrorRateList,
+                             "EquiWidthHistogram.csv",
+                             EquiWEMQeeDepthIterator,
+                             EquiWRGEeeDepthIterator,
+                             EquiWDCTeeDepthIterator,
+                             EquiWAEMQeeDepthIterator);
+                }
             }
 
             if (fAlgo)
@@ -793,19 +966,33 @@ namespace ConsoleApp1
                 GetEMQErrorList(rangeRows, colVal, EMQErrorRateList, AlgoEMQeeDepthIterator, histLs);
                 GetRGEErrorList(rangeRows, colVal, RGEErrorRateList, AlgoRGEeeDepthIterator, histLs);
                 GetDCTErrorList(rangeRows, colVal, DCTErrorRateList, AlgoDCTeeDepthIterator, histLs);
+                EMQErrorRateList.Sort();
+                ActualEMQErrorRateList.Sort();
+                RGEErrorRateList.Sort();
+                DCTErrorRateList.Sort();
 
-                FillFiles(FoldToCreateFiles,
-                      rangeRows,
-                      EMQErrorRateList, RGEErrorRateList,
-                      DCTErrorRateList, ActualEMQErrorRateList,
-                      "AlgorithmHistogram.csv",
-                      AlgoEMQeeDepthIterator,
-                      AlgoRGEeeDepthIterator,
-                      AlgoDCTeeDepthIterator,
-                      AlgoAEMQeeDepthIterator
-                      );
 
+                FillErrorMatrix(isBasic, basicType, multinomialType, ALGOTYPE.QH,
+                    EMQErrorRateList, RGEErrorRateList, DCTErrorRateList, ActualEMQErrorRateList);
+
+
+                if (ShouldFillFile)
+                {
+                    FillFiles(FoldToCreateFiles,
+                          rangeRows,
+                          EMQErrorRateList, RGEErrorRateList,
+                          DCTErrorRateList, ActualEMQErrorRateList,
+                          "AlgorithmHistogram.csv",
+                          AlgoEMQeeDepthIterator,
+                          AlgoRGEeeDepthIterator,
+                          AlgoDCTeeDepthIterator,
+                          AlgoAEMQeeDepthIterator
+                          );
+                }
             }
+
+            // All the algorithms are run, we will need to find out twhether the 
+            // quantile based errors can be shown
         }
         // Have a mechanism to quickly create a error list for agiven range rows
         // for apples to apple comparion the random ranges need to be on the same value boundaries 
@@ -840,6 +1027,53 @@ namespace ConsoleApp1
             erroriterator.Sort();
         }
 
+
+
+        /// <summary>
+        /// Filling the matrix, that will fill the final data.
+        /// </summary>
+        /// <param name="isBasic"></param>
+        /// <param name="basicType"></param>
+        /// <param name="multinomialType"></param>
+        /// <param name="algoType"></param>
+        /// <param name="EMQErrorRateList"></param>
+        /// <param name="RGEErrorRateList"></param>
+        /// <param name="DCTErrorRateList"></param>
+        /// <param name="AEMQrrorRateList"></param>
+        static void FillErrorMatrix(bool isBasic,
+            BASICDISTYPE basicType,
+            MULTNOMIALDIST multinomialType,
+            ALGOTYPE algoType,
+            List<double> EMQErrorRateList, List<double> RGEErrorRateList,
+            List<double> DCTErrorRateList, List<double> ActualEMQErrorRateList
+            )
+        {
+            if (isBasic)
+            {
+
+                foreach (QUANTILE enumDistType in Enum.GetValues(typeof(QUANTILE)))
+                {
+                    DistErrorValues[(int)(object)TYPETEST.AEMQ, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += ActualEMQErrorRateList[ActualEMQErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
+                    DistErrorValues[(int)(object)TYPETEST.EMQ, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
+                    DistErrorValues[(int)(object)TYPETEST.RGE, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
+                    DistErrorValues[(int)(object)TYPETEST.DCT, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += DCTErrorRateList[DCTErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
+
+                }
+            }
+            else
+            {
+                foreach (QUANTILE enumDistType in Enum.GetValues(typeof(QUANTILE)))
+                {
+                    MultiNomialErrorValues[(int)(object)TYPETEST.AEMQ, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += ActualEMQErrorRateList[ActualEMQErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
+                    MultiNomialErrorValues[(int)(object)TYPETEST.EMQ, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
+                    MultiNomialErrorValues[(int)(object)TYPETEST.RGE, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
+                    MultiNomialErrorValues[(int)(object)TYPETEST.DCT, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += DCTErrorRateList[DCTErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
+
+                }
+            }
+        }
+
+
         /// <summary>
         /// This will only fill the files so that we can add the information in the folder needed
         /// </summary>
@@ -871,12 +1105,9 @@ namespace ConsoleApp1
             string AEMQFullname;
 
 
+            // EMQErrorRateList.ForEach(Console.WriteLine);
             // We have the erroRate list and now we will sort it
-            EMQErrorRateList.Sort();
-            EMQErrorRateList.ForEach(Console.WriteLine);
-            AEMQrrorRateList.Sort();
-            RGEErrorRateList.Sort();
-            DCTErrorRateList.Sort();
+
 
             var csv = new StringBuilder();
 
@@ -2437,3 +2668,4 @@ namespace ConsoleApp1
     }
 
 }
+
