@@ -201,7 +201,7 @@ namespace ConsoleApp1
         {
             NORMAL,
             UNIFORM,
-            CHI,
+           // CHI,
             PARETO,
             RANDOM,
             LAPLACE,
@@ -261,7 +261,63 @@ namespace ConsoleApp1
                     {
                         RunTestsAccordingly(FoldToCreateFiles, true, enumDistType, MULTNOMIALDIST.DIRCHLET);
                     }
+
+
+                    foreach (ALGOTYPE algoType in Enum.GetValues(typeof(ALGOTYPE)))
+                    {
+
+                        foreach (QUANTILE quantType in Enum.GetValues(typeof(QUANTILE)))
+                        {
+                            DistErrorValues[(int)(object)TYPETEST.AEMQ, (int)(object)enumDistType, (int)(object)algoType, (int)(object)quantType] /= NumOFRuns;
+
+
+                            DistErrorValues[(int)(object)TYPETEST.EMQ, (int)(object)enumDistType, (int)(object)algoType, (int)(object)quantType] /= NumOFRuns;
+
+
+                            DistErrorValues[(int)(object)TYPETEST.RGE, (int)(object)enumDistType, (int)(object)algoType, (int)(object)quantType] /= NumOFRuns;
+
+
+                            DistErrorValues[(int)(object)TYPETEST.DCT, (int)(object)enumDistType, (int)(object)algoType, (int)(object)quantType] /= NumOFRuns;
+                        }
+                    }
+
                 }
+
+                string distfile = Path.Combine(FoldToCreateFiles, "BasicDistribute.txt");
+                //File.WriteAllText(distfile, String.Join("\n", colVal));
+
+                // No do the runs on the multinomial distribution types
+                foreach (MULTNOMIALDIST enumDistType in Enum.GetValues(typeof(MULTNOMIALDIST)))
+                {
+                    for (int i = 0; i < NumOFRuns; i++)
+                    {
+                        RunTestsAccordingly(FoldToCreateFiles, false, BASICDISTYPE.NORMAL, enumDistType);
+                    }
+
+
+                    foreach (ALGOTYPE algoType in Enum.GetValues(typeof(ALGOTYPE)))
+                    {
+
+                        foreach (QUANTILE quantType in Enum.GetValues(typeof(QUANTILE)))
+                        {
+                            MultiNomialErrorValues[(int)(object)TYPETEST.AEMQ, (int)(object)enumDistType, (int)(object)algoType, (int)(object)quantType] /= NumOFRuns;
+
+
+                            MultiNomialErrorValues[(int)(object)TYPETEST.EMQ, (int)(object)enumDistType, (int)(object)algoType, (int)(object)quantType] /= NumOFRuns;
+
+
+                            MultiNomialErrorValues[(int)(object)TYPETEST.RGE, (int)(object)enumDistType, (int)(object)algoType, (int)(object)quantType] /= NumOFRuns;
+
+
+                            MultiNomialErrorValues[(int)(object)TYPETEST.DCT, (int)(object)enumDistType, (int)(object)algoType, (int)(object)quantType] /= NumOFRuns;
+                        }
+                    }
+
+
+                }
+
+
+
 
             }
             catch (SqlException e)
@@ -304,7 +360,7 @@ namespace ConsoleApp1
 
 
                     Normal.Samples(SystemRandomSource.Default, samples, 1000.6, 200);
-                    colVal = samples.ToList();
+                    colVal = samples.Select(i => Math.Floor(i)).ToList();
                 }
                 else if (basicType == BASICDISTYPE.UNIFORM)
                 {
@@ -631,7 +687,7 @@ namespace ConsoleApp1
 
             // DistErrorValues = new double[typeCount, algoCount, basicDistCount];
             //MultiNomialErrorValues = new double[typeCount, algoCount, multdistcount];
-
+            dictCol.Clear();
 
             List<double> ActualEMQErrorRateList = new List<double>();
             List<double> EMQErrorRateList = new List<double>();
@@ -1039,7 +1095,7 @@ namespace ConsoleApp1
         /// <param name="EMQErrorRateList"></param>
         /// <param name="RGEErrorRateList"></param>
         /// <param name="DCTErrorRateList"></param>
-        /// <param name="AEMQrrorRateList"></param>
+        /// <param name="ActualEMQErrorRateList"></param>
         static void FillErrorMatrix(bool isBasic,
             BASICDISTYPE basicType,
             MULTNOMIALDIST multinomialType,
@@ -1053,10 +1109,10 @@ namespace ConsoleApp1
 
                 foreach (QUANTILE enumDistType in Enum.GetValues(typeof(QUANTILE)))
                 {
-                    DistErrorValues[(int)(object)TYPETEST.AEMQ, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += ActualEMQErrorRateList[ActualEMQErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
-                    DistErrorValues[(int)(object)TYPETEST.EMQ, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
-                    DistErrorValues[(int)(object)TYPETEST.RGE, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
-                    DistErrorValues[(int)(object)TYPETEST.DCT, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += DCTErrorRateList[DCTErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
+                    DistErrorValues[(int)(object)TYPETEST.AEMQ, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += ActualEMQErrorRateList[ActualEMQErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType] -1];
+                    DistErrorValues[(int)(object)TYPETEST.EMQ, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]-1];
+                    DistErrorValues[(int)(object)TYPETEST.RGE, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]-1];
+                    DistErrorValues[(int)(object)TYPETEST.DCT, (int)(object)basicType, (int)(object)algoType, (int)(object)enumDistType] += DCTErrorRateList[DCTErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]-1];
 
                 }
             }
@@ -1064,10 +1120,10 @@ namespace ConsoleApp1
             {
                 foreach (QUANTILE enumDistType in Enum.GetValues(typeof(QUANTILE)))
                 {
-                    MultiNomialErrorValues[(int)(object)TYPETEST.AEMQ, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += ActualEMQErrorRateList[ActualEMQErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
-                    MultiNomialErrorValues[(int)(object)TYPETEST.EMQ, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
-                    MultiNomialErrorValues[(int)(object)TYPETEST.RGE, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
-                    MultiNomialErrorValues[(int)(object)TYPETEST.DCT, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += DCTErrorRateList[DCTErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]];
+                    MultiNomialErrorValues[(int)(object)TYPETEST.AEMQ, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += ActualEMQErrorRateList[ActualEMQErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType] -1];
+                    MultiNomialErrorValues[(int)(object)TYPETEST.EMQ, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]-1];
+                    MultiNomialErrorValues[(int)(object)TYPETEST.RGE, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += RGEErrorRateList[RGEErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]-1];
+                    MultiNomialErrorValues[(int)(object)TYPETEST.DCT, (int)(object)multinomialType, (int)(object)algoType, (int)(object)enumDistType] += DCTErrorRateList[DCTErrorRateList.Count / 100 * quantVal[(int)(object)enumDistType]-1];
 
                 }
             }
