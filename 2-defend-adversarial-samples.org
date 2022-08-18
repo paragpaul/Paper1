@@ -1,0 +1,381 @@
+# Part 2 Defend Adversarial Samples
+
+* Introduction
+:PROPERTIES:
+:CUSTOM_ID: chp:bin:introduction
+:END:
+
+** Motivation
+:PROPERTIES:
+:CUSTOM_ID: sec:bin:motivation
+:END:
+
+Deep neural networks have been successfully adopted to many life critical areas,
+e.g., skin cancer detection cite:esteva2017-dermatologist, auto-driving
+cite:santana2016-learning, traffic sign classification cite:ciresan2012-multi,
+etc.  A recent study cite:szegedy2013-intriguing, however, discovered that deep
+neural networks are susceptible to adversarial images.  Figure
+ref:fig:adv-example shows an example of adversarial images generated via fast
+gradient sign method cite:kurakin2016-adversarial,kurakin2016-adversarial-1 on
+MNIST.  The adversarial images (second row) are generated from the first row via
+iterative FGSM.  The label of each image is shown below with prediction
+probability in parenthesis.  Our model achieves less then 1% error rate on the
+clean data.  As we can see that although the adversarial and original clean
+images are almost identical from the perspective of human beings, the deep
+neural network will produce wrong predictions with very high confidence.
+Similar techniques can easily fool the image system into mistaking a stop sign
+for a yield sign, a dog for a automobile, for example.  When leveraged by
+malicious users, these adversarial images pose a great threat to the deep neural
+network systems.
+
+#+CAPTION: Adversarial samples.
+#+NAME: fig:adv-example
+[[file:ex_adv_mnist.pdf]]
+
+** Proposed Defense
+:PROPERTIES:
+:CUSTOM_ID: sec:bin:proposed-defense
+:END:
+
+Although adversarial and clean images appear visually indiscernible, their
+subtle differences can successfully fool the deep neural networks.  This means
+that deep neural networks are very sensitive to these subtle differences.  So an
+intuitively question to ask is: can we leverage the neural nets' sensitivity to
+subtle differences to distinguish between adversarial and clean images?  Our
+preliminary results suggest that the answer is positive.  In this work we
+demonstrate that a simple binary classifier can separate the adversarial from
+the original clean images with very high accuracy (over 99%).  However, we also
+show that the binary classifier suffers from the generalization limitation,
+i.e., it is sensitive 1) to hyperparameters in adversarial methods, and 2) to
+different ways the adversarials are crafted.  In addition to that, we also
+discover that this limitation is also shared among other proposed defense
+methods, e.g., defensive training
+cite:huang2015-learning,kurakin2016-adversarial-1, knowledge distillation
+cite:papernot2015-distillation, etc.  We empirically investigate the limitation
+and propose the hypothesis that the adversarial and original dataset are, in
+effect, two completely /different/ datasets, despite being visually similar.
+
+This part is organized as follows.  In Chapter ref:chp:bin:related-work, we give
+an overview of the current research in adversarial defense.  The adversarial
+generating algorithms are already surveyed in ref:chp:textadv:related-work.
+Chapter ref:chp:bin:experiment presents our preliminary results and discussions.
+
+* Related Work
+:PROPERTIES:
+:CUSTOM_ID: chp:bin:related-work
+:END:
+
+Generally speaking, generating adversarial samples are much cheaper and easier
+than defending them.  Despite numerous work on defense in literature, little
+progress has been made toward understanding and defending adversarial samples.
+There are two orthogonal lines of work towards the defense of adversarial
+samples.  The first direction focuses on the improvement of the model, while the
+other focuses on preprocessing the inputs, e.g, detecting or recovering the
+adversarial samples.
+
+** Enhance Models
+:PROPERTIES:
+:CUSTOM_ID: sec:bin:enhance-models
+:END:
+
+The main idea to improve models' robustness to adversarial samples is to include
+adversarial samples during training process
+cite:lee2017-generative,kurakin2016-adversarial-1,huang2015-learning,miyato2017-virtual.
+However, as discussed in Section ref:sec:bin:limitation, this class of methods
+suffer from, what we call, the /generalization limitations/.  Our experiment
+suggests this seems to be an intrinsic property of adversarial datasets.
+
+cite:zantedeschi2017-efficient suggests that the activation bounded ReLU may
+provide some robustness.
+
+Knowledge distillation cite:hinton2015-distilling in itself is also shown to be
+an viable method in some cases cite:papernot2015-distillation.  The restrictions
+of knowledge distillation are 1) that it only applies to models that produce
+categorical probabilities, and 2) that it needs model re-training.
+
+** Preprocess Inputs
+:PROPERTIES:
+:CUSTOM_ID: sec:bin:preprocess-inputs
+:END:
+
+WGAN cite:arjovsky2017-wasserstein is used in cite:anonymous2018-defense to
+denoise the adversarial images.  cite:meng2017-magnet uses GAN (called reformer
+in the paper) to move adversarial samples closer to the clean ones.
+cite:guo2017-countering,kurakin2016-adversarial,xie2017-mitigating performs
+various image transformations (e.g., applying Gaussian noise/Gaussian filters,
+JPEG compression cite:kurakin2016-adversarial, resizing cite:xie2017-mitigating,
+image quilting cite:guo2017-countering) to all incoming images, be it clean or
+adversarial.  However in our experiment, the performance of the
+transformation-based defense varies a lot across different datasets.
+
+Adversarial image/noise are detected based on images statistics, e.g,
+entropy cite:liang2017-detecting,pang2017-towards, psychometric perceptual
+adversarial similarity score (PASS) cite:rozsa2016-adversarial.
+cite:song2017-pixeldefend detects the adversarial samples by hypothesis testing.
+cite:yao2017-automated proposes a defense method for text models based on the
+score computed from a language model.
+
+Around the same time of our study, another work cite:metzen2017-detecting also
+proposes the binary classifier as a defense.  The difference is that they are
+too optimistic about the effective of this approach.
+
+* Experiment
+:PROPERTIES:
+:CUSTOM_ID: chp:bin:experiment
+:END:
+
+Generally, we follow the steps below to test the effectiveness and limitation of
+the binary classifier approach.
+
+1. Train a deep neural network \(f_1\) on the original clean training data
+   \(X_{train}\), and craft adversarial dataset from the original clean data,
+   \(X_{train}\to X^{adv(f_1)}_{train}\), \(X_{test}\to X^{adv(f_1)}_{test}\).
+   \(f_1\) is used to generate the attacking adversarial dataset which we want
+   to filter out.
+2. Train a binary classifier \(f_2\) on the combined (shuffled) training data
+   \(\{X_{train}, X^{adv(f_1)}_{train}\}\), where \(X_{train}\) is labeled 0 and
+   \(X^{adv(f_1)}_{train}\) labeled 1.
+3. Test the accuracy of \(f_2\) on \(X_{test}\) and \(X^{adv(f_1)}_{test}\),
+   respectively.
+4. Construct second-round adversarial test data, \(\{X_{test},
+   X^{adv(f_1)}_{test}\}\to \{X_{test}, X^{adv(f_1)}_{test}\}^{adv(f_2)}\) and
+   test \(f_2\) accuracy on this new adversarial dataset.  Concretely, we want
+   to test whether we could find adversarial samples 1) that can successfully
+   bypass the binary classifier \(f_2\), and 2) that can still fool the target
+   model \(f_1\) if they bypass the binary classifier.  Since adversarial
+   datasets are shown to be transferable among different machine learning
+   techniques cite:papernot2016-transferability, the binary classifier approach
+   will be seriously flawed if \(f_2\) failed this second-round attacking test.
+
+The code to reproduce our experiment are available
+https://github.com/gongzhitaao/adversarial-classifier.
+
+** Efficiency and Robustness of the Classifier
+:PROPERTIES:
+:CUSTOM_ID: sec:bin:good-classifier
+:END:
+
+#+BEGIN_EXPORT latex
+\begin{table*}[htbp]
+  \caption{\label{tab:accuracy-summary}
+    Accuracy on adversarial samples generated with FGSM/TGSM.}
+  \centering
+  \begin{tabular}{lcrrcrrrr}
+    \toprule
+    & \phantom{a} & \multicolumn{2}{c}{\(f_1\)} & \phantom{a} & \multicolumn{4}{c}{\(f_2\)} \\
+    \cmidrule{3-4} \cmidrule{6-9}
+    Dataset && \(X_{test}\) & \(X^{adv(f_1)}_{test}\) && \(X_{test}\) & \(X^{adv(f_1)}_{test}\) & \(\{X_{test}\}^{adv(f_2)}\) & \(\{X^{adv(f_1)}_{test}\}^{adv(f_2)}\) \\
+    \midrule
+    MNIST && 0.9914 & 0.0213 && 1.00 & 1.00 & 0.00 & 1.00\\
+    CIFAR10 && 0.8279 & 0.1500 && 0.99 & 1.00 & 0.01 & 1.00\\
+    SVHN && 0.9378 & 0.2453 && 1.00 & 1.00 & 0.00 & 1.00\\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+#+END_EXPORT
+
+We evaluate the binary classifier approach on MNIST, CIFAR10, and SVHN datasets.
+Of all the datasets, the binary classifier achieved accuracy over 99% and was
+shown to be robust to a second-round adversarial attack.  The results are
+summarized in Table ref:tab:accuracy-summary.  Each column denotes the model
+accuracy on the corresponding dataset.  The direct conclusions from Table
+ref:tab:accuracy-summary are summarized as follows.
+1. Accuracy on \(X_{test}\) and \(X^{adv(f_1)}_{test}\) suggests that the binary
+   classifier is very effective at separating adversarial from clean dataset.
+   Actually during our experiment, the accuracy on \(X_{test}\) is always near
+   1, while the accuracy on \(X^{adv(f_1)}_{test}\) is either near 1
+   (successful) or near 0 (unsuccessful).  Which means that the classifier
+   either successfully detects the subtle difference completely or fails
+   completely.  We did not observe any values in between.
+3. Accuracy on \(\{X^{adv(f_1)}_{test}\}^{adv(f_2)}\) suggests that we were not
+   successful in disguising adversarial samples to bypass the the classifier.
+   In other words, the binary classifier approach is robust to a second-round
+   adversarial attack.
+4. Accuracy on \(\{X_{test}\}^{adv(f_2)}\) suggests that in case of the
+   second-round attack, the binary classifier has very high false negative.  In
+   other words, it tends to recognize them all as adversarials.  This, does not
+   pose a problem in our opinion.  Since our main focus is to block adversarial
+   samples.
+
+** Generalization Limitation
+:PROPERTIES:
+:CUSTOM_ID: sec:bin:limitation
+:END:
+
+Before we conclude too optimistic about the binary classifier approach
+performance, however, we discover that it suffers from the /generalization
+limitation/.
+1. When trained to recognize adversarial dataset generated via FGSM/TGSM, the
+   binary classifier is sensitive to the hyper-parameter \(\epsilon\).
+2. The binary classifier is also sensitive to the adversarial crafting
+   algorithm.
+
+In out experiment, the aforementioned limitations also apply to adversarial
+training cite:kurakin2016-adversarial-1,huang2015-learning and defensive
+distillation cite:papernot2015-distillation.
+
+*** Sensitivity to \(\epsilon\)
+:PROPERTIES:
+:CUSTOM_ID: subsec:bin:sensitity-to-e
+:END:
+
+Table ref:tab:eps-sensitivity-cifar10 summarizes our tests on CIFAR10.  For
+brevity, we use \(\eval{f_2}_{\epsilon=\epsilon_0}\) to denote that the
+classifier \(f_2\) is trained on adversarial data generated on \(f_1\) with
+\(\epsilon=\epsilon_0\).  The binary classifier is trained on mixed clean data
+and adversarial dataset which is generated via FGSM with \(\epsilon=0.03\).
+Then we re-generate adversarial dataset via FGSM/TGSM with different
+\(\epsilon\) values.
+
+#+BEGIN_EXPORT latex
+\begin{table}[htbp]
+  \caption{\label{tab:eps-sensitivity-cifar10}
+    \(\epsilon\) sensitivity on CIFAR10}
+  \centering
+  \begin{tabular}{lcll}
+    \toprule
+    & \phantom{a} & \multicolumn{2}{c}{\(\eval{f_2}_{\epsilon=0.03}\)} \\
+    \cmidrule{3-4}
+    \(\epsilon\) && \(X_{test}\) & \(X^{adv(f_1)}_{test}\)\\
+    \midrule
+    0.3 && 0.9996 & 1.0000\\
+    0.1 && 0.9996 & 1.0000\\
+    0.03 && 0.9996 & 0.9997\\
+    0.01 && 0.9996 & \textbf{0.0030}\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+#+END_EXPORT
+
+As shown in Table ref:tab:eps-sensitivity-cifar10,
+\(\eval{f_2}_{\epsilon=\epsilon_0}\) can correctly filter out adversarial
+dataset generated with \(\epsilon\geq\epsilon_0\), but fails when adversarial
+data are generated with \(\epsilon<\epsilon_1\).  Results on MNIST and SVHN are
+similar.  This phenomenon was also observed in defensive training
+cite:kurakin2016-adversarial-1.  To overcome this issue, they proposed to use
+mixed \(\epsilon\) values to generate the adversarial datasets.  However, Table
+ref:tab:eps-sensitivity-cifar10 suggests that adversarial datasets generated
+with smaller \(\epsilon\) are /superset/ of those generated with larger
+\(\epsilon\).  This hypothesis could be well explained by the linearity
+hypothesis cite:kurakin2016-adversarial,warde-farley2016-adversarial.  The same
+conclusion also applies to adversarial training.  In our experiment, the results
+of defensive training are similar to the binary classifier approach.
+
+*** Disparity among Adversarial Samples
+:PROPERTIES:
+:CUSTOM_ID: subsec:bin:disparity-among-adversarial-samples
+:END:
+
+#+CAPTION: Adversarial training \cite{huang2015-learning,kurakin2016-adversarial-1} does not work properly.
+#+NAME: fig:adv-training-not-working
+[[file:adv-training-not-working.pdf]]
+
+Figure ref:fig:adv-training-not-working is a church window plot
+\cite{warde-farley2016-adversarial}.  Each pixel \((i, j)\) (row index and
+column index pair) represents a data point \(\tilde{x}\) in the input space and
+\(\tilde{x} = x + \vb{h}\epsilon_j + \vb{v}\epsilon_i\), where \(\vb{h}\) is the
+direction computed by FGSM and \(\vb{v}\) is a random direction orthogonal to
+\(\vb{h}\).  The \(\epsilon\) ranges from \([-0.5, 0.5]\) and
+\(\epsilon_{(\cdot)}\) is the interpolated value in between.  The central black
+dot @@latex:\tikz[baseline=-0.5ex]{\draw[fill=black] (0,0) circle (0.3ex)}@@
+represents the original data point \(x\), the orange dot (on the right of the
+center dot) @@latex:\tikz[baseline=-0.5ex]{\draw[fill=orange,draw=none] (0,0)
+circle (0.3ex)}@@ represents the last adversarial sample created from \(x\) via
+FGSM that is used in the adversarial training and the blue dot
+@@latex:\tikz[baseline=-0.5ex]{\draw[fill=blue,draw=none] (0,0) circle
+(0.3ex)}@@ represents a random adversarial sample created from \(x\) that cannot
+be recognized with adversarial training. The three digits below each image, from
+left to right, are the data samples that correspond to the black dot, orange dot
+and blue dot, respectively.  @@latex:\tikz[baseline=0.5ex]{\draw (0,0) rectangle
+(2.5ex,2.5ex)}@@ ( @@latex:\tikz[baseline=0.5ex]{\draw[fill=black,opacity=0.1]
+(0,0) rectangle (2.5ex,2.5ex)}@@ ) represents the data samples that are always
+correctly (incorrectly) recognized by the model.
+@@latex:\tikz[baseline=0.5ex]{\draw[fill=red,opacity=0.1] (0,0) rectangle
+(2.5ex,2.5ex)}@@ represents the adversarial samples that can be correctly
+recognized without adversarial training only.  And
+@@latex:\tikz[baseline=0.5ex]{\draw[fill=green,opacity=0.1] (0,0) rectangle
+(2.5ex,2.5ex)}@@ represents the data points that were correctly recognized with
+adversarial training only, i.e., the side effect of adversarial training.
+
+In our experiment, we also discovered that the binary classifier is also
+sensitive to the algorithms used to generate the adversarial datasets.
+
+Specifically, the binary classifier trained on FGSM adversarial dataset achieves
+good accuracy (over 99%) on FGSM adversarial dataset, but not on adversarial
+generated via JSMA, and vise versa.  However, when binary classifier is trained
+on a mixed adversarial dataset from FGSM and JSMA, it performs well (with
+accuracy over 99%) on both datasets.  This suggests that FGSM and JSMA generate
+adversarial datasets that are /far away/ from each other.  It is too vague
+without defining precisely what is /being far away/.  In our opinion, they are
+/far away/ in the same way that CIFAR10 is /far away/ from SVHN.  A well-trained
+model on CIFAR10 will perform poorly on SVHN, and vise versa.  However, a
+well-trained model on the the mixed dataset of CIFAR10 and SVHN will perform
+just as well, if not better, on both datasets, as if it is trained solely on one
+dataset.
+
+The adversarial datasets generated via FGSM and TGSM are, however, /compatible/
+with each other.  In other words, the classifier trained on one adversarial
+datasets performs well on adversarials from the other algorithm.  They are
+compatible in the same way that training set and test set are compatible.
+Usually we expect a model, when properly trained, should generalize well to the
+unseen data from the same distribution, e.g., the test dataset.
+
+In effect, it is not just FGSM and JSMA are incompatible.  We can generate
+adversarial data samples by a linear combination of the direction computed by
+FGSM and another random orthogonal direction, as illustrated in a church plot
+cite:warde-farley2016-adversarial Figure ref:fig:adv-training-not-working.
+Figure ref:fig:adv-training-not-working visually shows the effect of adversarial
+training cite:kurakin2016-adversarial-1.  Each image represents adversarial
+samples generated from /one/ data sample, which is represented as a black dot in
+the center of each image, the last adversarial sample used in adversarial
+training is represented as an orange dot (on the right of black dot, i.e., in
+the direction computed by FGSM).  The green area represents the adversarial
+samples that cannot be correctly recognized without adversarial training but can
+be correctly recognized with adversarial training.  The red area represents data
+samples that can be correctly recognized without adversarial training but cannot
+be correctly recognized with adversarial training.  In other words, it
+represents the side effect of adversarial training, i.e., slightly reducing the
+model accuracy.  The white (gray) area represents the data samples that are
+always correctly (incorrectly) recognized with or without adversarial training.
+
+As we can see from Figure ref:fig:adv-training-not-working, adversarial training
+does make the model more robust against the adversarial sample (and adversarial
+samples around it to some extent) used for training (green area).  However, it
+does not rule out all adversarials.  There are still adversarial samples (gray
+area) that are not affected by the adversarial training.  Further more, we could
+observe that the green area largely distributes along the horizontal direction,
+i.e., the FGSM direction.  In cite:nguyen2014-deep, they observed similar
+results for fooling images.  In their experiment, adversarial training with
+fooling images, deep neural network models are more robust against a limited set
+of fooling images.  However they can still be fooled by other fooling images
+easily.
+
+* Next Step
+:PROPERTIES:
+:CUSTOM_ID: chp:bin:next-step
+:END:
+
+1. Make a thorough study of all the defense methods.
+2. Despite of the ever proliferating papers on defense, few make any concrete
+   contribution to the understanding of adversarial samples.  We plan to
+   investigate this phenomenon from a theoretical point of view, following some
+   of recent work cite:peck2017-lower,gilmer2018-adversarial.
+3. Study the defense for adversarial texts.
+
+* COMMENT Conclusion
+:PROPERTIES:
+:CUSTOM_ID: chp:bin:conclusion
+:END:
+
+We show in this paper that the binary classifier is a simple yet effective and
+robust way to separating adversarial from the original clean images.  Its
+advantage over defensive training and distillation is that it serves as a
+preprocessing step without assumptions about the model it protects.  Besides, it
+can be readily deployed without any modification of the underlying systems.
+However, as we empirically showed in the experiment, the binary classifier
+approach, defensive training and distillation all suffer from the generalization
+limitation.  For future work, we plan to extend our current work in two
+directions.  First, we want to investigate the disparity between different
+adversarial crafting methods and its effect on the generated adversarial space.
+Second, we will also carefully examine the cause of adversarial samples since
+intuitively the linear hypothesis does not seem right to us.
